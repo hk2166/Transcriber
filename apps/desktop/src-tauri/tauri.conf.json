@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "meeting_mind",
+        "title": "MeetingMind",
         "width": 800,
         "height": 600
       }

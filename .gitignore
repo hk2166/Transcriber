@@ -1,5 +1,3 @@
-Task.md
-
 # Python virtual environment
 venv/
 .venv/
@@ -7,3 +5,14 @@ venv/
 # Python cache
 __pycache__/
 *.py[cod]
+
+# Node.js dependencies
+node_modules/
+
+# Build artifacts
+dist/
+target/
+
+# Environment variables
+.env
+Task.md
