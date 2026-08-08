@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import logging
 import threading
-from typing import Any, Callable, Optional
+from collections.abc import Callable
+from typing import Any
 
 import numpy as np
 import sounddevice as sd
@@ -52,7 +53,7 @@ class AudioCapture:
             raise ValueError("Audio device cannot be None.")
         self.device = device
         self.callback = callback
-        self._stream: Optional[sd.InputStream] = None
+        self._stream: sd.InputStream | None = None
         self._lock = threading.Lock()
 
     # ------------------------------------------------------------------

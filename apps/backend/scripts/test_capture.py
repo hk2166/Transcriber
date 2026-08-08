@@ -1,7 +1,7 @@
 """Manual integration test: record 5 seconds of system audio via BlackHole.
 
 Run from apps/backend/:
-    uv run python scripts/test_capture.py
+    uv run python -m scripts.test_capture
 """
 
 import logging
