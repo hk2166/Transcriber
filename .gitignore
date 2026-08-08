@@ -16,3 +16,6 @@ target/
 # Environment variables
 .env
 Task.md
+
+# Audio test artifacts (manual capture scripts write these)
+apps/backend/test_*.wav
