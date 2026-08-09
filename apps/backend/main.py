@@ -10,6 +10,8 @@ import logging.config
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from routers.audio import router as audio_router
+
 logging.config.dictConfig(
     {
         "version": 1,
@@ -48,6 +50,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(audio_router)
 
 
 @app.get("/health", tags=["meta"])
