@@ -1,0 +1,190 @@
+/* ===== Reset ===== */
+*, *::before, *::after { box-sizing: border-box; }
+* { margin: 0; }
+html, body, #root { height: 100%; }
+button { cursor: pointer; font-family: inherit; color: inherit; }
+
+/* ===== Design tokens — dark is the default (Task.md) ===== */
+:root {
+  --bg-base: #1c1c1e;
+  --bg-elevated: #2c2c2e;
+  --bg-sidebar: rgba(30, 30, 32, 0.72);
+  --bg-hover: rgba(255, 255, 255, 0.06);
+  --text-primary: #f5f5f7;
+  --text-secondary: rgba(235, 235, 245, 0.6);
+  --text-tertiary: rgba(235, 235, 245, 0.3);
+  --border: rgba(255, 255, 255, 0.1);
+  --accent: #0a84ff;
+  --record: #ff453a;
+  --record-glow: rgba(255, 69, 58, 0.35);
+  --ok: #30d158;
+  --radius: 10px;
+  --sidebar-width: 260px;
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg-base: #f5f5f7;
+    --bg-elevated: #ffffff;
+    --bg-sidebar: rgba(246, 246, 248, 0.72);
+    --bg-hover: rgba(0, 0, 0, 0.04);
+    --text-primary: #1d1d1f;
+    --text-secondary: rgba(60, 60, 67, 0.6);
+    --text-tertiary: rgba(60, 60, 67, 0.3);
+    --border: rgba(0, 0, 0, 0.1);
+    --accent: #007aff;
+    --record: #ff3b30;
+    --record-glow: rgba(255, 59, 48, 0.3);
+    --ok: #34c759;
+    color-scheme: light;
+  }
+}
+
+body {
+  font-family: -apple-system, system-ui, "SF Pro Text", sans-serif;
+  font-optical-sizing: auto;
+  line-height: 1.5;
+  color: var(--text-primary);
+  background: var(--bg-base);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ===== Layout ===== */
+.app { display: flex; height: 100%; overflow: hidden; }
+
+.sidebar {
+  width: var(--sidebar-width);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px 14px;
+  background: var(--bg-sidebar);
+  -webkit-backdrop-filter: blur(30px) saturate(180%);
+  backdrop-filter: blur(30px) saturate(180%);
+  border-right: 1px solid var(--border);
+}
+
+.sidebar__header { display: flex; align-items: center; gap: 10px; padding: 4px; }
+.app-mark {
+  width: 22px; height: 22px; border-radius: 7px;
+  background: linear-gradient(135deg, var(--accent), #5e5ce6);
+}
+.app-name { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+
+.new-meeting {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 9px; width: 100%;
+  font-size: 13px; font-weight: 500;
+  background: var(--bg-hover);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  transition: transform 100ms ease-out, background 150ms ease;
+}
+.new-meeting:hover { background: var(--border); }
+.new-meeting:active { transform: scale(0.97); }
+
+.meeting-list { flex: 1; overflow-y: auto; }
+.meeting-list__empty {
+  font-size: 13px; color: var(--text-tertiary);
+  text-align: center; padding: 24px 0;
+}
+
+.sidebar__footer {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12px; color: var(--text-secondary);
+}
+.dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.dot--ok { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+.dot--off { background: var(--text-tertiary); }
+
+/* ===== Main panel ===== */
+.main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 18px 28px;
+  border-bottom: 1px solid var(--border);
+}
+.topbar h2 { font-size: 17px; font-weight: 600; letter-spacing: -0.02em; }
+.topbar__sub { font-size: 13px; color: var(--text-secondary); }
+.elapsed {
+  font-size: 15px; font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+.stage {
+  flex: 1;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 28px;
+  padding: 24px;
+}
+
+/* Segmented source selector */
+.source-selector {
+  display: inline-flex; padding: 3px; gap: 2px;
+  background: var(--bg-hover); border-radius: var(--radius);
+}
+.segment {
+  padding: 6px 16px; font-size: 13px; font-weight: 500;
+  color: var(--text-secondary);
+  border: none; border-radius: 8px; background: transparent;
+  transition: transform 100ms ease-out, background 150ms ease, color 150ms ease;
+}
+.segment:hover:not(.segment--active):not(:disabled) { color: var(--text-primary); }
+.segment:active:not(:disabled) { transform: scale(0.97); }
+.segment--active {
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+.segment:disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* Record button — ring + morphing icon (circle → rounded square) */
+.record-button {
+  width: 76px; height: 76px; border-radius: 50%;
+  border: 4px solid var(--border); background: transparent;
+  display: grid; place-items: center;
+  transition: transform 100ms ease-out;
+}
+.record-button:active { transform: scale(0.96); }
+.record-button__icon {
+  width: 54px; height: 54px; border-radius: 50%;
+  background: var(--record);
+  transition: width 200ms ease, height 200ms ease, border-radius 200ms ease;
+}
+.record-button--recording { animation: record-pulse 2s ease-in-out infinite; }
+.record-button--recording .record-button__icon {
+  width: 26px; height: 26px; border-radius: 7px;
+}
+@keyframes record-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 var(--record-glow); }
+  50% { box-shadow: 0 0 0 16px transparent; }
+}
+
+.stage__hint { font-size: 13px; color: var(--text-tertiary); }
+
+/* Volume meter — compositor-friendly scaleX, JS drives the value in chunk 3 */
+.meter {
+  width: 220px; height: 6px; border-radius: 3px;
+  background: var(--bg-hover); overflow: hidden;
+}
+.meter__fill {
+  height: 100%; width: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--ok));
+  transform-origin: left center;
+  transform: scaleX(0);
+  transition: transform 80ms linear;
+}
+
+/* ===== Accessibility (apple-design §14) ===== */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; }
+  .meter__fill, .record-button__icon { transition: none; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .sidebar {
+    background: var(--bg-elevated);
+    -webkit-backdrop-filter: none; backdrop-filter: none;
+  }
+}
