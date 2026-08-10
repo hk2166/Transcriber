@@ -188,3 +188,7 @@ body {
     -webkit-backdrop-filter: none; backdrop-filter: none;
   }
 }
+
+/* ===== Chunk 3 additions ===== */
+.record-button:disabled { opacity: 0.55; cursor: default; }
+.stage__error { font-size: 13px; font-weight: 500; color: var(--record); }
