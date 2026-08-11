@@ -192,3 +192,30 @@ body {
 /* ===== Chunk 3 additions ===== */
 .record-button:disabled { opacity: 0.55; cursor: default; }
 .stage__error { font-size: 13px; font-weight: 500; color: var(--record); }
+
+/* ===== Speech indicator (VAD) ===== */
+.topbar__right { display: flex; align-items: center; gap: 16px; }
+.speech-indicator {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; font-weight: 500;
+  color: var(--text-tertiary);
+  transition: color 150ms ease;
+}
+.speech-indicator--active { color: var(--ok); }
+.speech-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--text-tertiary);
+  transition: background 120ms ease, box-shadow 120ms ease;
+}
+.speech-indicator--active .speech-dot {
+  background: var(--ok);
+  box-shadow: 0 0 8px var(--ok);
+  animation: speech-pulse 1.4s ease-in-out infinite;
+}
+@keyframes speech-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .speech-indicator--active .speech-dot { animation: none; }
+}

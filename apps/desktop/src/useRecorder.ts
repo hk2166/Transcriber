@@ -15,6 +15,7 @@ interface RecorderState {
   status: RecorderStatus;
   session: StartResponse | null;
   level: number; // 0..1 smoothed meter level
+  speechActive: boolean; // VAD: someone is speaking right now
   elapsedMs: number;
   error: string | null;
 }
@@ -26,6 +27,7 @@ const INITIAL: RecorderState = {
   status: "idle",
   session: null,
   level: 0,
+  speechActive: false,
   elapsedMs: 0,
   error: null,
 };
@@ -86,7 +88,11 @@ export function useRecorder() {
         const target = Math.min(1, rms * RMS_GAIN);
         levelRef.current =
           target > levelRef.current ? target : levelRef.current * DECAY;
-        setState((s) => ({ ...s, level: levelRef.current }));
+        setState((s) => ({
+          ...s,
+          level: levelRef.current,
+          speechActive: msg.speech === true,
+        }));
       };
 
       ws.onerror = () => {
@@ -98,6 +104,7 @@ export function useRecorder() {
         status: "recording",
         session,
         level: 0,
+        speechActive: false,
         elapsedMs: 0,
       }));
     },
@@ -112,7 +119,7 @@ export function useRecorder() {
       // Stopping an already-gone session must not strand the UI.
     }
     closeSocket();
-    setState((s) => ({ ...s, status: "idle", level: 0 }));
+    setState((s) => ({ ...s, status: "idle", level: 0, speechActive: false }));
   }, [closeSocket]);
 
   // Elapsed timer — runs only while recording.

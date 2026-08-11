@@ -21,6 +21,7 @@ from packages.audio import (
     SystemAudioCapture,
     default_recordings_dir,
 )
+from packages.vad import SileroVAD, SpeechSegmenter
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +57,12 @@ class AudioSession:
     from a foreign thread.
     """
 
-    def __init__(self, source: AudioSource, loop: asyncio.AbstractEventLoop) -> None:
+    def __init__(
+        self,
+        source: AudioSource,
+        loop: asyncio.AbstractEventLoop,
+        vad_enabled: bool = True,
+    ) -> None:
         """Create the session and its capture; does not start streaming yet.
 
         Raises:
@@ -70,6 +76,15 @@ class AudioSession:
             maxsize=STREAM_QUEUE_MAXSIZE
         )
         self._stream_drops = 0
+
+        # Voice-activity segmentation runs on the lossless audio thread so it
+        # sees every block; for now it only drives the live "speaking" dot,
+        # and Day 4 will consume its emitted segments for transcription.
+        self.vad_enabled = vad_enabled
+        self._segmenter: SpeechSegmenter | None = (
+            SpeechSegmenter(SileroVAD()) if vad_enabled else None
+        )
+        self._speech_active = False
 
         wav_name = f"{self.started_at:%Y-%m-%d_%H%M%S}_{self.session_id}.wav"
         self.recorder = SessionRecorder(default_recordings_dir() / wav_name)
@@ -92,8 +107,17 @@ class AudioSession:
     # ------------------------------------------------------------------
 
     def _on_block(self, block: np.ndarray) -> None:
-        """Audio-thread callback: tee to disk first, then to the stream."""
+        """Audio-thread callback: tee to disk, run VAD, then stream."""
         self.recorder.write(block)
+        if self._segmenter is not None:
+            for segment in self._segmenter.process(block):
+                logger.info(
+                    "Speech segment: %d–%d ms (%.1f s)",
+                    segment.start_ms,
+                    segment.end_ms,
+                    segment.duration_ms / 1000,
+                )
+            self._speech_active = self._segmenter.is_speech_active
         self._loop.call_soon_threadsafe(self._enqueue_for_stream, block)
 
     def _enqueue_for_stream(self, block: np.ndarray) -> None:
@@ -124,6 +148,15 @@ class AudioSession:
         if isinstance(self.capture, MixedAudioCapture):
             return self.capture.system_available
         return isinstance(self.capture, SystemAudioCapture)
+
+    @property
+    def speech_active(self) -> bool:
+        """True while the VAD segmenter has speech in progress.
+
+        Written on the audio thread and read on the event loop; a lone bool
+        read/write needs no lock under CPython.
+        """
+        return self._speech_active
 
     def start(self) -> None:
         """Start recorder and capture; on capture failure, leave no debris."""
@@ -165,7 +198,7 @@ class SessionManager:
         """The currently running session, if any."""
         return self._active
 
-    def start(self, source: AudioSource) -> AudioSession:
+    def start(self, source: AudioSource, vad_enabled: bool = True) -> AudioSession:
         """Create and start a session.
 
         Raises:
@@ -177,7 +210,9 @@ class SessionManager:
                 f"Session {self._active.session_id} is already active. "
                 "Stop it before starting a new one."
             )
-        session = AudioSession(source, asyncio.get_running_loop())
+        session = AudioSession(
+            source, asyncio.get_running_loop(), vad_enabled=vad_enabled
+        )
         session.start()
         self._active = session
         return session

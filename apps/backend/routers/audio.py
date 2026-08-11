@@ -18,12 +18,14 @@ router = APIRouter(prefix="/audio", tags=["audio"])
 
 class StartRequest(BaseModel):
     source: AudioSource = "both"
+    vad_enabled: bool = True
 
 
 class StartResponse(BaseModel):
     session_id: str
     source: AudioSource
     system_available: bool
+    vad_enabled: bool
     wav_path: str
 
 
@@ -39,7 +41,7 @@ async def start_session(request: StartRequest) -> StartResponse:
     """Start a recording session. 409 if one is active, 503 if the
     requested audio device is unavailable."""
     try:
-        session = manager.start(request.source)
+        session = manager.start(request.source, vad_enabled=request.vad_enabled)
     except SessionConflict as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except RuntimeError as exc:
@@ -48,6 +50,7 @@ async def start_session(request: StartRequest) -> StartResponse:
         session_id=session.session_id,
         source=session.source,
         system_available=session.system_available,
+        vad_enabled=session.vad_enabled,
         wav_path=str(session.recorder.path),
     )
 
@@ -96,6 +99,7 @@ async def stream_audio(websocket: WebSocket, session_id: str) -> None:
                 {
                     "type": "audio",
                     "frames": len(block),
+                    "speech": session.speech_active,
                     "data": base64.b64encode(block.tobytes()).decode("ascii"),
                 }
             )

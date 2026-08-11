@@ -35,7 +35,8 @@ function subtitleFor(status: RecorderStatus): string {
 
 function App() {
   const [source, setSource] = useState<AudioSource>("both");
-  const { status, level, elapsedMs, error, start, stop } = useRecorder();
+  const { status, level, speechActive, elapsedMs, error, start, stop } =
+    useRecorder();
 
   const recording = status === "recording";
   const busy = status === "starting" || status === "stopping";
@@ -76,7 +77,22 @@ function App() {
             <h2>New recording</h2>
             <p className="topbar__sub">{subtitleFor(status)}</p>
           </div>
-          <div className="elapsed">{formatElapsed(recording ? elapsedMs : 0)}</div>
+          <div className="topbar__right">
+            {recording && (
+              <div
+                className={
+                  "speech-indicator" +
+                  (speechActive ? " speech-indicator--active" : "")
+                }
+              >
+                <span className="speech-dot" />
+                {speechActive ? "Speech" : "Silence"}
+              </div>
+            )}
+            <div className="elapsed">
+              {formatElapsed(recording ? elapsedMs : 0)}
+            </div>
+          </div>
         </header>
 
         <section className="stage">
