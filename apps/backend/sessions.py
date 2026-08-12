@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
+import time
 import uuid
 from datetime import datetime
 from typing import Literal
@@ -21,7 +23,8 @@ from packages.audio import (
     SystemAudioCapture,
     default_recordings_dir,
 )
-from packages.vad import SileroVAD, SpeechSegmenter
+from packages.transcription import TranscriptSegment, WhisperTranscriber
+from packages.vad import SileroVAD, SpeechSegment, SpeechSegmenter
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +41,25 @@ AudioSource = Literal["mic", "system", "both"]
 #: Stream buffer: 256 blocks ≈ 16 s of audio. Overflow drops WebSocket
 #: audio only — the recorder tee always receives every block.
 STREAM_QUEUE_MAXSIZE = 256
+
+WHISPER_MODEL_SIZE = "small"
+
+_transcriber: WhisperTranscriber | None = None
+_transcriber_lock = threading.Lock()
+
+def get_transcriber() -> WhisperTranscriber:
+    """
+    Return the process-wide Whisper model, loading it once on first use.
+
+    Blocking (model load is multi-second) — call it from a worker thread via
+    ``asyncio.to_thread``, never directly on the event loop.
+    """
+    global _transcriber
+    with _transcriber_lock:
+        if _transcriber is None:
+            _transcriber = WhisperTranscriber(model_size=WHISPER_MODEL_SIZE)
+        return _transcriber
+    
 
 
 class SessionConflict(RuntimeError):
@@ -78,13 +100,22 @@ class AudioSession:
         self._stream_drops = 0
 
         # Voice-activity segmentation runs on the lossless audio thread so it
-        # sees every block; for now it only drives the live "speaking" dot,
-        # and Day 4 will consume its emitted segments for transcription.
+        # sees every block; it drives the live "speaking" dot and feeds the
+        # transcriber worker.
         self.vad_enabled = vad_enabled
         self._segmenter: SpeechSegmenter | None = (
             SpeechSegmenter(SileroVAD()) if vad_enabled else None
         )
         self._speech_active = False
+
+        # Speech segments cross from the audio thread to the transcriber
+        # worker via _seg_queue; finished transcripts fan out to the
+        # transcription WebSocket via transcript_queue.
+        self._seg_queue: asyncio.Queue[tuple[SpeechSegment, float] | None] = (
+            asyncio.Queue()
+        )
+        self.transcript_queue: asyncio.Queue[TranscriptSegment | None] = asyncio.Queue()
+        self._worker_task: asyncio.Task | None = None
 
         wav_name = f"{self.started_at:%Y-%m-%d_%H%M%S}_{self.session_id}.wav"
         self.recorder = SessionRecorder(default_recordings_dir() / wav_name)
@@ -111,11 +142,8 @@ class AudioSession:
         self.recorder.write(block)
         if self._segmenter is not None:
             for segment in self._segmenter.process(block):
-                logger.info(
-                    "Speech segment: %d–%d ms (%.1f s)",
-                    segment.start_ms,
-                    segment.end_ms,
-                    segment.duration_ms / 1000,
+                self._loop.call_soon_threadsafe(
+                    self._seg_queue.put_nowait, (segment, time.monotonic())
                 )
             self._speech_active = self._segmenter.is_speech_active
         self._loop.call_soon_threadsafe(self._enqueue_for_stream, block)
@@ -137,6 +165,36 @@ class AudioSession:
         if self.stream_queue.full():
             self.stream_queue.get_nowait()
         self.stream_queue.put_nowait(None)
+
+    async def _transcribe_worker(self) -> None:
+        """Drain speech segments → Whisper → transcript_queue (event loop task).
+
+        Whisper runs in a worker thread so neither the model load nor
+        inference blocks the event loop. Per-stage latencies are logged for
+        the Day 15 performance pass.
+        """
+        transcriber = await asyncio.to_thread(get_transcriber)
+        while True:
+            item = await self._seg_queue.get()
+            if item is None:
+                break
+            segment, enqueued_at = item
+            wait_ms = (time.monotonic() - enqueued_at) * 1000
+            t0 = time.monotonic()
+            transcript = await asyncio.to_thread(
+                transcriber.transcribe, segment.audio, segment.start_ms
+            )
+            asr_ms = (time.monotonic() - t0) * 1000
+            if transcript is not None:
+                logger.info(
+                    "Transcript [seg %dms · wait %.0fms · asr %.0fms]: %s",
+                    segment.duration_ms,
+                    wait_ms,
+                    asr_ms,
+                    transcript.text,
+                )
+                await self.transcript_queue.put(transcript)
+        await self.transcript_queue.put(None)
 
     # ------------------------------------------------------------------
     # Public API
@@ -167,6 +225,8 @@ class AudioSession:
             self.recorder.close()
             self.recorder.path.unlink(missing_ok=True)
             raise
+        if self._segmenter is not None:
+            self._worker_task = self._loop.create_task(self._transcribe_worker())
         logger.info(
             "Session %s started (source=%s) → %s",
             self.session_id,
@@ -179,6 +239,13 @@ class AudioSession:
         via ``asyncio.to_thread`` from async code."""
         self.capture.stop()
         self.recorder.close()
+        if self._segmenter is not None:
+            tail = self._segmenter.flush()
+            if tail is not None:
+                self._loop.call_soon_threadsafe(
+                    self._seg_queue.put_nowait, (tail, time.monotonic())
+                )
+            self._loop.call_soon_threadsafe(self._seg_queue.put_nowait, None)
         self._loop.call_soon_threadsafe(self._end_stream)
         logger.info(
             "Session %s stopped (%.1f s recorded).",
