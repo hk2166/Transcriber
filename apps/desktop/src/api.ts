@@ -16,6 +16,14 @@ export interface StopResponse {
   wav_path: string;
 }
 
+export interface TranscriptSegment {
+  text: string;
+  start_ms: number;
+  end_ms: number;
+  language: string;
+  confidence: number;
+}
+
 export class ApiError extends Error {
   status: number;
   constructor(status: number, message: string) {

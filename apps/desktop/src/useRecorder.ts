@@ -6,6 +6,7 @@ import {
   stopSession,
   type AudioSource,
   type StartResponse,
+  type TranscriptSegment,
 } from "./api";
 import { WS_BASE } from "./config";
 
@@ -16,6 +17,7 @@ interface RecorderState {
   session: StartResponse | null;
   level: number; // 0..1 smoothed meter level
   speechActive: boolean; // VAD: someone is speaking right now
+  transcripts: TranscriptSegment[];
   elapsedMs: number;
   error: string | null;
 }
@@ -28,6 +30,7 @@ const INITIAL: RecorderState = {
   session: null,
   level: 0,
   speechActive: false,
+  transcripts: [],
   elapsedMs: 0,
   error: null,
 };
@@ -35,13 +38,14 @@ const INITIAL: RecorderState = {
 export function useRecorder() {
   const [state, setState] = useState<RecorderState>(INITIAL);
 
-  const wsRef = useRef<WebSocket | null>(null);
+  const audioWsRef = useRef<WebSocket | null>(null);
+  const transcriptWsRef = useRef<WebSocket | null>(null);
   const levelRef = useRef(0);
   const startedAtRef = useRef(0);
 
-  const closeSocket = useCallback(() => {
-    const ws = wsRef.current;
-    wsRef.current = null;
+  const closeSocket = useCallback((ref: { current: WebSocket | null }) => {
+    const ws = ref.current;
+    ref.current = null;
     if (ws) {
       ws.onmessage = null;
       ws.onclose = null;
@@ -49,6 +53,11 @@ export function useRecorder() {
       ws.close();
     }
   }, []);
+
+  const closeSockets = useCallback(() => {
+    closeSocket(audioWsRef);
+    closeSocket(transcriptWsRef);
+  }, [closeSocket]);
 
   const start = useCallback(
     async (source: AudioSource) => {
@@ -67,13 +76,13 @@ export function useRecorder() {
       levelRef.current = 0;
       startedAtRef.current = Date.now();
 
-      const ws = new WebSocket(`${WS_BASE}/audio/stream/${session.session_id}`);
-      wsRef.current = ws;
-
-      ws.onmessage = (event) => {
+      // Audio stream — drives the volume meter and the speech dot.
+      const audioWs = new WebSocket(`${WS_BASE}/audio/stream/${session.session_id}`);
+      audioWsRef.current = audioWs;
+      audioWs.onmessage = (event) => {
         const msg = JSON.parse(event.data);
         if (msg.type === "end") {
-          closeSocket();
+          closeSocket(audioWsRef);
           return;
         }
         if (msg.type !== "audio") return;
@@ -94,9 +103,30 @@ export function useRecorder() {
           speechActive: msg.speech === true,
         }));
       };
-
-      ws.onerror = () => {
+      audioWs.onerror = () => {
         setState((s) => ({ ...s, error: "Audio stream error." }));
+      };
+
+      // Transcript stream — text as speech is recognised.
+      const transcriptWs = new WebSocket(
+        `${WS_BASE}/transcription/stream/${session.session_id}`,
+      );
+      transcriptWsRef.current = transcriptWs;
+      transcriptWs.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        if (msg.type === "end") {
+          closeSocket(transcriptWsRef);
+          return;
+        }
+        if (msg.type !== "transcript") return;
+        const segment: TranscriptSegment = {
+          text: msg.text,
+          start_ms: msg.start_ms,
+          end_ms: msg.end_ms,
+          language: msg.language,
+          confidence: msg.confidence,
+        };
+        setState((s) => ({ ...s, transcripts: [...s.transcripts, segment] }));
       };
 
       setState((s) => ({
@@ -105,6 +135,7 @@ export function useRecorder() {
         session,
         level: 0,
         speechActive: false,
+        transcripts: [],
         elapsedMs: 0,
       }));
     },
@@ -118,9 +149,9 @@ export function useRecorder() {
     } catch {
       // Stopping an already-gone session must not strand the UI.
     }
-    closeSocket();
+    closeSockets();
     setState((s) => ({ ...s, status: "idle", level: 0, speechActive: false }));
-  }, [closeSocket]);
+  }, [closeSockets]);
 
   // Elapsed timer — runs only while recording.
   useEffect(() => {
@@ -131,8 +162,8 @@ export function useRecorder() {
     return () => clearInterval(id);
   }, [state.status]);
 
-  // Kill any live socket if the component unmounts.
-  useEffect(() => closeSocket, [closeSocket]);
+  // Kill any live sockets if the component unmounts.
+  useEffect(() => closeSockets, [closeSockets]);
 
   return { ...state, start, stop };
 }
