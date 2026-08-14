@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import type { AudioSource } from "./api";
 import { APP_NAME } from "./config";
+import { LiveTranscript } from "./LiveTranscript";
 import { RecordButton } from "./RecordButton";
 import { SourceSelector } from "./SourceSelector";
 import { useRecorder, type RecorderStatus } from "./useRecorder";
@@ -11,6 +12,12 @@ const SOURCE_HINT: Record<AudioSource, string> = {
   mic: "Captures your microphone",
   system: "Captures system audio via BlackHole",
   both: "Captures mic + system audio",
+};
+
+const SOURCE_LABEL: Record<AudioSource, string> = {
+  mic: "Mic",
+  system: "System",
+  both: "Mic + System",
 };
 
 function formatElapsed(ms: number): string {
@@ -35,7 +42,7 @@ function subtitleFor(status: RecorderStatus): string {
 
 function App() {
   const [source, setSource] = useState<AudioSource>("both");
-  const { status, level, speechActive, elapsedMs, error, start, stop } =
+  const { status, level, speechActive, transcripts, elapsedMs, error, start, stop } =
     useRecorder();
 
   const recording = status === "recording";
@@ -79,6 +86,9 @@ function App() {
           </div>
           <div className="topbar__right">
             {recording && (
+              <span className="topbar__source">{SOURCE_LABEL[source]}</span>
+            )}
+            {recording && (
               <div
                 className={
                   "speech-indicator" +
@@ -95,12 +105,16 @@ function App() {
           </div>
         </header>
 
-        <section className="stage">
-          <SourceSelector
-            value={source}
-            onChange={setSource}
-            disabled={status !== "idle"}
-          />
+        <LiveTranscript
+          segments={transcripts}
+          recording={recording}
+          speechActive={speechActive}
+        />
+
+        <footer className="controlbar">
+          {status === "idle" && (
+            <SourceSelector value={source} onChange={setSource} disabled={false} />
+          )}
 
           <RecordButton recording={recording} busy={busy} onClick={handleToggle} />
 
@@ -113,7 +127,7 @@ function App() {
               {recording ? "Listening…" : SOURCE_HINT[source]}
             </p>
           )}
-        </section>
+        </footer>
       </main>
     </div>
   );
