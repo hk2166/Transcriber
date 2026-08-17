@@ -6,10 +6,13 @@ Start with:
 
 import logging
 import logging.config
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from database import close_db, get_db
 from routers.audio import router as audio_router
 from routers.transcription import router as transcription_router
 
@@ -35,10 +38,19 @@ logging.config.dictConfig(
 
 logger = logging.getLogger(__name__)
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    get_db()  # open + migrate before serving
+    yield
+    close_db()
+
+
 app = FastAPI(
     title="MeetingMind",
     description="Local AI meeting assistant — 100% offline.",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(

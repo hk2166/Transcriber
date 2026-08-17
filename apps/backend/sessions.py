@@ -16,6 +16,7 @@ from typing import Literal
 
 import numpy as np
 
+from database import get_db
 from packages.audio import (
     MicrophoneCapture,
     MixedAudioCapture,
@@ -23,6 +24,7 @@ from packages.audio import (
     SystemAudioCapture,
     default_recordings_dir,
 )
+from packages.storage import create_meeting, end_meeting, insert_segment
 from packages.transcription import TranscriptSegment, WhisperTranscriber
 from packages.vad import SileroVAD, SpeechSegment, SpeechSegmenter
 
@@ -117,6 +119,10 @@ class AudioSession:
         self.transcript_queue: asyncio.Queue[TranscriptSegment | None] = asyncio.Queue()
         self._worker_task: asyncio.Task | None = None
 
+        # Set by the manager once the meeting row exists; the worker persists
+        # each transcript against it.
+        self.meeting_id: int | None = None
+
         wav_name = f"{self.started_at:%Y-%m-%d_%H%M%S}_{self.session_id}.wav"
         self.recorder = SessionRecorder(default_recordings_dir() / wav_name)
 
@@ -193,6 +199,16 @@ class AudioSession:
                     asr_ms,
                     transcript.text,
                 )
+                if self.meeting_id is not None:
+                    insert_segment(
+                        get_db(),
+                        self.meeting_id,
+                        text=transcript.text,
+                        start_ms=transcript.start_ms,
+                        end_ms=transcript.end_ms,
+                        language=transcript.language,
+                        confidence=transcript.confidence,
+                    )
                 await self.transcript_queue.put(transcript)
         await self.transcript_queue.put(None)
 
@@ -280,6 +296,14 @@ class SessionManager:
         session = AudioSession(
             source, asyncio.get_running_loop(), vad_enabled=vad_enabled
         )
+        # Create the meeting row before starting the worker, so it has an id
+        # to persist segments against from its very first transcript.
+        session.meeting_id = create_meeting(
+            get_db(),
+            source=source,
+            wav_path=str(session.recorder.path),
+            started_at=session.started_at,
+        )
         session.start()
         self._active = session
         return session
@@ -294,6 +318,15 @@ class SessionManager:
             raise SessionNotFound("No active session to stop.")
         session, self._active = self._active, None
         await asyncio.to_thread(session.stop)
+        # Wait for the worker to drain (incl. the flushed final segment) so
+        # everything is persisted before the meeting is marked ready.
+        if session._worker_task is not None:
+            try:
+                await asyncio.wait_for(session._worker_task, timeout=30)
+            except (TimeoutError, asyncio.CancelledError):
+                session._worker_task.cancel()
+        if session.meeting_id is not None:
+            end_meeting(get_db(), session.meeting_id, ended_at=datetime.now())
         return session
 
     def get(self, session_id: str) -> AudioSession:
