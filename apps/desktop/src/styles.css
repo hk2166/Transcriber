@@ -84,10 +84,36 @@ body {
 .new-meeting:hover { background: var(--border); }
 .new-meeting:active { transform: scale(0.97); }
 
-.meeting-list { flex: 1; overflow-y: auto; }
+.meeting-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
 .meeting-list__empty {
   font-size: 13px; color: var(--text-tertiary);
   text-align: center; padding: 24px 0;
+}
+.meeting-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  transition: background 120ms ease;
+}
+.meeting-item:hover:not(:disabled) { background: var(--bg-hover); }
+.meeting-item--active { background: var(--bg-hover); }
+.meeting-item:disabled { opacity: 0.5; cursor: default; }
+.meeting-item__title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.meeting-item__meta {
+  font-size: 11px;
+  color: var(--text-tertiary);
 }
 
 .sidebar__footer {

@@ -24,6 +24,17 @@ export interface TranscriptSegment {
   confidence: number;
 }
 
+export interface Meeting {
+  id: number;
+  title: string;
+  source: AudioSource;
+  status: string;
+  wav_path: string | null;
+  started_at: string;
+  ended_at: string | null;
+  segment_count: number;
+}
+
 export class ApiError extends Error {
   status: number;
   constructor(status: number, message: string) {
@@ -58,4 +69,20 @@ export function startSession(source: AudioSource): Promise<StartResponse> {
 
 export function stopSession(): Promise<StopResponse> {
   return postJson<StopResponse>("/audio/stop");
+}
+
+async function getJson<T>(path: string): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`);
+  if (!res.ok) {
+    throw new ApiError(res.status, res.statusText);
+  }
+  return (await res.json()) as T;
+}
+
+export function getMeetings(): Promise<Meeting[]> {
+  return getJson<Meeting[]>("/meetings");
+}
+
+export function getMeetingSegments(id: number): Promise<TranscriptSegment[]> {
+  return getJson<TranscriptSegment[]>(`/meetings/${id}/segments`);
 }

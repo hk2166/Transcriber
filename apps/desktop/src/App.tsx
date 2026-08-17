@@ -1,6 +1,12 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
-import type { AudioSource } from "./api";
+import {
+  getMeetingSegments,
+  getMeetings,
+  type AudioSource,
+  type Meeting,
+  type TranscriptSegment,
+} from "./api";
 import { APP_NAME } from "./config";
 import { LiveTranscript } from "./LiveTranscript";
 import { RecordButton } from "./RecordButton";
@@ -45,8 +51,42 @@ function App() {
   const { status, level, speechActive, transcripts, elapsedMs, error, start, stop } =
     useRecorder();
 
+  const [meetings, setMeetings] = useState<Meeting[]>([]);
+  const [connected, setConnected] = useState(true);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [pastSegments, setPastSegments] = useState<TranscriptSegment[]>([]);
+
   const recording = status === "recording";
   const busy = status === "starting" || status === "stopping";
+  const idle = status === "idle";
+
+  const refreshMeetings = useCallback(async () => {
+    try {
+      setMeetings(await getMeetings());
+      setConnected(true);
+    } catch {
+      setConnected(false);
+    }
+  }, []);
+
+  // Load meetings on mount and whenever a recording finishes (status → idle).
+  useEffect(() => {
+    if (idle) refreshMeetings();
+  }, [idle, refreshMeetings]);
+
+  const selectMeeting = async (id: number) => {
+    setSelectedId(id);
+    try {
+      setPastSegments(await getMeetingSegments(id));
+    } catch {
+      setPastSegments([]);
+    }
+  };
+
+  const newRecording = () => {
+    setSelectedId(null);
+    setPastSegments([]);
+  };
 
   const handleToggle = () => {
     if (recording) {
@@ -56,6 +96,9 @@ function App() {
     }
   };
 
+  const selectedMeeting = meetings.find((m) => m.id === selectedId) ?? null;
+  const viewingPast = selectedMeeting !== null;
+
   return (
     <div className="app">
       <aside className="sidebar">
@@ -64,70 +107,113 @@ function App() {
           <h1 className="app-name">{APP_NAME}</h1>
         </div>
 
-        <button className="new-meeting">
+        <button className="new-meeting" onClick={newRecording} disabled={!idle}>
           <span aria-hidden>＋</span> New meeting
         </button>
 
         <nav className="meeting-list">
-          <p className="meeting-list__empty">No meetings yet</p>
+          {meetings.length === 0 ? (
+            <p className="meeting-list__empty">No meetings yet</p>
+          ) : (
+            meetings.map((meeting) => (
+              <button
+                key={meeting.id}
+                className={
+                  "meeting-item" +
+                  (meeting.id === selectedId ? " meeting-item--active" : "")
+                }
+                onClick={() => selectMeeting(meeting.id)}
+                disabled={!idle}
+              >
+                <span className="meeting-item__title">{meeting.title}</span>
+                <span className="meeting-item__meta">
+                  {meeting.segment_count} segment{meeting.segment_count === 1 ? "" : "s"}
+                </span>
+              </button>
+            ))
+          )}
         </nav>
 
         <div className="sidebar__footer">
-          <span className="dot dot--ok" />
-          Backend connected
+          <span className={"dot " + (connected ? "dot--ok" : "dot--off")} />
+          {connected ? "Backend connected" : "Backend offline"}
         </div>
       </aside>
 
       <main className="main">
-        <header className="topbar">
-          <div className="topbar__title">
-            <h2>New recording</h2>
-            <p className="topbar__sub">{subtitleFor(status)}</p>
-          </div>
-          <div className="topbar__right">
-            {recording && (
-              <span className="topbar__source">{SOURCE_LABEL[source]}</span>
-            )}
-            {recording && (
-              <div
-                className={
-                  "speech-indicator" +
-                  (speechActive ? " speech-indicator--active" : "")
-                }
-              >
-                <span className="speech-dot" />
-                {speechActive ? "Speech" : "Silence"}
+        {viewingPast ? (
+          <>
+            <header className="topbar">
+              <div className="topbar__title">
+                <h2>{selectedMeeting.title}</h2>
+                <p className="topbar__sub">
+                  {selectedMeeting.segment_count} segments · {SOURCE_LABEL[selectedMeeting.source]}
+                </p>
               </div>
-            )}
-            <div className="elapsed">
-              {formatElapsed(recording ? elapsedMs : 0)}
-            </div>
-          </div>
-        </header>
+            </header>
+            <LiveTranscript
+              segments={pastSegments}
+              recording={false}
+              speechActive={false}
+            />
+          </>
+        ) : (
+          <>
+            <header className="topbar">
+              <div className="topbar__title">
+                <h2>New recording</h2>
+                <p className="topbar__sub">{subtitleFor(status)}</p>
+              </div>
+              <div className="topbar__right">
+                {recording && (
+                  <span className="topbar__source">{SOURCE_LABEL[source]}</span>
+                )}
+                {recording && (
+                  <div
+                    className={
+                      "speech-indicator" +
+                      (speechActive ? " speech-indicator--active" : "")
+                    }
+                  >
+                    <span className="speech-dot" />
+                    {speechActive ? "Speech" : "Silence"}
+                  </div>
+                )}
+                <div className="elapsed">
+                  {formatElapsed(recording ? elapsedMs : 0)}
+                </div>
+              </div>
+            </header>
 
-        <LiveTranscript
-          segments={transcripts}
-          recording={recording}
-          speechActive={speechActive}
-        />
+            <LiveTranscript
+              segments={transcripts}
+              recording={recording}
+              speechActive={speechActive}
+            />
 
-        <footer className="controlbar">
-          {status === "idle" && (
-            <SourceSelector value={source} onChange={setSource} disabled={false} />
-          )}
+            <footer className="controlbar">
+              {idle && (
+                <SourceSelector value={source} onChange={setSource} disabled={false} />
+              )}
 
-          <RecordButton recording={recording} busy={busy} onClick={handleToggle} />
+              <RecordButton
+                recording={recording}
+                busy={busy}
+                onClick={handleToggle}
+              />
 
-          <VolumeMeter level={recording ? level : 0} />
+              <VolumeMeter level={recording ? level : 0} />
 
-          {error ? (
-            <p className="stage__error">{error}</p>
-          ) : (
-            <p className="stage__hint">
-              {recording ? "Listening…" : SOURCE_HINT[source]}
-            </p>
-          )}
-        </footer>
+              {error ? (
+                <p className="stage__error">{error}</p>
+              ) : (
+                <p className="stage__hint">
+                  {recording ? "Listening…" : SOURCE_HINT[source]}
+                </p>
+              )}
+            </footer>
+          </>
+        )}
       </main>
     </div>
   );
