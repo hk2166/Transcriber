@@ -10,7 +10,9 @@ FIXTURE = Path(__file__).parent / "fixtures" / "known_speech.wav"
 
 @pytest.fixture(scope="module")
 def transcriber() -> WhisperTranscriber:
-    return WhisperTranscriber(model_size='small', language="en")
+    # Auto-detect (language=None) to match production and exercise the
+    # low-confidence-language hallucination guard.
+    return WhisperTranscriber(model_size="small")
 
 
 def test_transcribes_known_keywords(transcriber):
@@ -28,3 +30,11 @@ def test_transcribes_known_keywords(transcriber):
 
 def test_silence_returns_none(transcriber):
     assert transcriber.transcribe(np.zeros(16000, dtype="float32")) is None
+
+
+def test_low_noise_does_not_hallucinate(transcriber):
+    # Faint broadband noise the VAD might let through must not become text
+    # (Whisper would otherwise invent a phrase in a random language).
+    rng = np.random.RandomState(0)
+    noise = (0.01 * rng.randn(16000 * 3)).astype("float32")
+    assert transcriber.transcribe(noise) is None
