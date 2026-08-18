@@ -22,6 +22,15 @@ export interface TranscriptSegment {
   end_ms: number;
   language: string;
   confidence: number;
+  speaker_id?: number | null; // set on stored segments after diarization
+}
+
+export interface Speaker {
+  id: number;
+  meeting_id: number;
+  label: string; // "Speaker 1" (auto)
+  name: string | null; // user-assigned override
+  color: string;
 }
 
 export interface Meeting {
@@ -85,4 +94,15 @@ export function getMeetings(): Promise<Meeting[]> {
 
 export function getMeetingSegments(id: number): Promise<TranscriptSegment[]> {
   return getJson<TranscriptSegment[]>(`/meetings/${id}/segments`);
+}
+
+export function getMeetingSpeakers(id: number): Promise<Speaker[]> {
+  return getJson<Speaker[]>(`/meetings/${id}/speakers`);
+}
+
+export function renameSpeaker(
+  speaker_id: number,
+  name: string,
+): Promise<{ renamed: boolean }> {
+  return postJson<{ renamed: boolean }>("/speakers/rename", { speaker_id, name });
 }

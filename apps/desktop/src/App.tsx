@@ -3,8 +3,11 @@ import { useCallback, useEffect, useState } from "react";
 import {
   getMeetingSegments,
   getMeetings,
+  getMeetingSpeakers,
+  renameSpeaker,
   type AudioSource,
   type Meeting,
+  type Speaker,
   type TranscriptSegment,
 } from "./api";
 import { APP_NAME } from "./config";
@@ -55,6 +58,7 @@ function App() {
   const [connected, setConnected] = useState(true);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [pastSegments, setPastSegments] = useState<TranscriptSegment[]>([]);
+  const [pastSpeakers, setPastSpeakers] = useState<Speaker[]>([]);
 
   const recording = status === "recording";
   const busy = status === "starting" || status === "stopping";
@@ -77,15 +81,31 @@ function App() {
   const selectMeeting = async (id: number) => {
     setSelectedId(id);
     try {
-      setPastSegments(await getMeetingSegments(id));
+      const [segments, speakers] = await Promise.all([
+        getMeetingSegments(id),
+        getMeetingSpeakers(id),
+      ]);
+      setPastSegments(segments);
+      setPastSpeakers(speakers);
     } catch {
       setPastSegments([]);
+      setPastSpeakers([]);
+    }
+  };
+
+  const handleRenameSpeaker = async (speakerId: number, name: string) => {
+    try {
+      await renameSpeaker(speakerId, name);
+      if (selectedId !== null) setPastSpeakers(await getMeetingSpeakers(selectedId));
+    } catch {
+      // Ignore — the chip keeps its previous name.
     }
   };
 
   const newRecording = () => {
     setSelectedId(null);
     setPastSegments([]);
+    setPastSpeakers([]);
   };
 
   const handleToggle = () => {
@@ -127,7 +147,9 @@ function App() {
               >
                 <span className="meeting-item__title">{meeting.title}</span>
                 <span className="meeting-item__meta">
-                  {meeting.segment_count} segment{meeting.segment_count === 1 ? "" : "s"}
+                  {meeting.status === "processing"
+                    ? "Finding speakers…"
+                    : `${meeting.segment_count} segment${meeting.segment_count === 1 ? "" : "s"}`}
                 </span>
               </button>
             ))
@@ -147,7 +169,9 @@ function App() {
               <div className="topbar__title">
                 <h2>{selectedMeeting.title}</h2>
                 <p className="topbar__sub">
-                  {selectedMeeting.segment_count} segments · {SOURCE_LABEL[selectedMeeting.source]}
+                  {selectedMeeting.status === "processing"
+                    ? "Finding speakers…"
+                    : `${selectedMeeting.segment_count} segments · ${SOURCE_LABEL[selectedMeeting.source]}`}
                 </p>
               </div>
             </header>
@@ -155,6 +179,8 @@ function App() {
               segments={pastSegments}
               recording={false}
               speechActive={false}
+              speakers={pastSpeakers}
+              onRenameSpeaker={handleRenameSpeaker}
             />
           </>
         ) : (
