@@ -10,10 +10,12 @@ from database import get_db
 from packages.storage import (
     Meeting,
     Segment,
+    Speaker,
     delete_meeting,
     get_meeting,
     get_meetings,
     get_segments,
+    get_speakers,
 )
 
 router = APIRouter(prefix="/meetings", tags=["meetings"])
@@ -43,6 +45,13 @@ def read_segments(meeting_id: int) -> list[Segment]:
     """A meeting's transcript segments, in time order (404 if unknown)."""
     _require_meeting(meeting_id)
     return get_segments(get_db(), meeting_id)
+
+
+@router.get("/{meeting_id}/speakers")
+def read_speakers(meeting_id: int) -> list[Speaker]:
+    """A meeting's speakers (404 if the meeting is unknown)."""
+    _require_meeting(meeting_id)
+    return get_speakers(get_db(), meeting_id)
 
 
 @router.delete("/{meeting_id}")

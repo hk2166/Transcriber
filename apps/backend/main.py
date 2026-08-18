@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from database import close_db, get_db
 from routers.audio import router as audio_router
 from routers.meetings import router as meetings_router
+from routers.speakers import router as speakers_router
 from routers.transcription import router as transcription_router
 
 logging.config.dictConfig(
@@ -71,6 +72,7 @@ app.add_middleware(
 app.include_router(audio_router)
 app.include_router(transcription_router)
 app.include_router(meetings_router)
+app.include_router(speakers_router)
 
 @app.get("/health", tags=["meta"])
 async def health() -> dict[str, str]:
