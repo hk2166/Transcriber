@@ -7,6 +7,7 @@ stays independent of the transcription package.
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime
@@ -15,6 +16,7 @@ __all__ = [
     "Meeting",
     "Segment",
     "Speaker",
+    "StoredSummary",
     "create_meeting",
     "create_speakers",
     "delete_meeting",
@@ -23,9 +25,12 @@ __all__ = [
     "get_meetings",
     "get_segments",
     "get_speakers",
+    "get_summary",
     "insert_segment",
     "rename_speaker",
+    "save_summary",
     "set_meeting_status",
+    "set_meeting_title",
     "set_segment_speaker",
 ]
 
@@ -73,6 +78,15 @@ class Speaker:
     label: str  # "Speaker 1" (auto) — overridden by name
     name: str | None  # user-assigned
     color: str
+
+
+@dataclass
+class StoredSummary:
+    summary: str
+    key_points: list[str]
+    action_items: list[str]
+    decisions: list[str]
+    open_questions: list[str]
 
 
 def _title_for(started_at: datetime) -> str:
@@ -258,6 +272,59 @@ def rename_speaker(conn: sqlite3.Connection, speaker_id: int, name: str) -> bool
     )
     conn.commit()
     return cursor.rowcount > 0
+
+
+def set_meeting_title(conn: sqlite3.Connection, meeting_id: int, title: str) -> None:
+    """Replace a meeting's title (LLM title supersedes the date-based one)."""
+    conn.execute("UPDATE meetings SET title = ? WHERE id = ?", (title, meeting_id))
+    conn.commit()
+
+
+def save_summary(
+    conn: sqlite3.Connection,
+    meeting_id: int,
+    *,
+    summary: str,
+    key_points: list[str],
+    action_items: list[str],
+    decisions: list[str],
+    open_questions: list[str],
+) -> None:
+    """Insert or replace a meeting's summary (one per meeting)."""
+    conn.execute(
+        "INSERT INTO summaries "
+        "(meeting_id, summary, key_points, action_items, decisions, open_questions) "
+        "VALUES (?, ?, ?, ?, ?, ?) "
+        "ON CONFLICT(meeting_id) DO UPDATE SET "
+        "summary = excluded.summary, key_points = excluded.key_points, "
+        "action_items = excluded.action_items, decisions = excluded.decisions, "
+        "open_questions = excluded.open_questions",
+        (
+            meeting_id,
+            summary,
+            json.dumps(key_points),
+            json.dumps(action_items),
+            json.dumps(decisions),
+            json.dumps(open_questions),
+        ),
+    )
+    conn.commit()
+
+
+def get_summary(conn: sqlite3.Connection, meeting_id: int) -> StoredSummary | None:
+    """A meeting's summary, or ``None`` if not yet generated."""
+    row = conn.execute(
+        "SELECT * FROM summaries WHERE meeting_id = ?", (meeting_id,)
+    ).fetchone()
+    if row is None:
+        return None
+    return StoredSummary(
+        summary=row["summary"] or "",
+        key_points=json.loads(row["key_points"] or "[]"),
+        action_items=json.loads(row["action_items"] or "[]"),
+        decisions=json.loads(row["decisions"] or "[]"),
+        open_questions=json.loads(row["open_questions"] or "[]"),
+    )
 
 
 def _meeting(row: sqlite3.Row) -> Meeting:

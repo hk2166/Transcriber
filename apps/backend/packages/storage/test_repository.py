@@ -14,9 +14,12 @@ from packages.storage import (
     get_meetings,
     get_segments,
     get_speakers,
+    get_summary,
     insert_segment,
     rename_speaker,
+    save_summary,
     set_meeting_status,
+    set_meeting_title,
     set_segment_speaker,
 )
 
@@ -140,3 +143,35 @@ def test_set_meeting_status(conn):
     meeting_id = _new_meeting(conn)
     set_meeting_status(conn, meeting_id, "processing")
     assert get_meeting(conn, meeting_id).status == "processing"
+
+
+def test_set_meeting_title(conn):
+    meeting_id = _new_meeting(conn)
+    set_meeting_title(conn, meeting_id, "Q3 Roadmap Review")
+    assert get_meeting(conn, meeting_id).title == "Q3 Roadmap Review"
+
+
+def test_save_and_get_summary_roundtrip(conn):
+    meeting_id = _new_meeting(conn)
+    assert get_summary(conn, meeting_id) is None
+    save_summary(
+        conn, meeting_id,
+        summary="We reviewed the roadmap.",
+        key_points=["a", "b"], action_items=["email"], decisions=[],
+        open_questions=["when?"],
+    )
+    stored = get_summary(conn, meeting_id)
+    assert stored.summary == "We reviewed the roadmap."
+    assert stored.key_points == ["a", "b"]
+    assert stored.decisions == []
+
+
+def test_save_summary_replaces_existing(conn):
+    meeting_id = _new_meeting(conn)
+    save_summary(conn, meeting_id, summary="first", key_points=[], action_items=[],
+                 decisions=[], open_questions=[])
+    save_summary(conn, meeting_id, summary="second", key_points=["x"], action_items=[],
+                 decisions=[], open_questions=[])
+    stored = get_summary(conn, meeting_id)
+    assert stored.summary == "second"
+    assert stored.key_points == ["x"]

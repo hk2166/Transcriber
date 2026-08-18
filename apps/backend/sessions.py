@@ -16,7 +16,7 @@ from typing import Literal
 
 import numpy as np
 
-import diarization_job
+import postprocess_job
 from database import get_db
 from packages.audio import (
     MicrophoneCapture,
@@ -334,7 +334,7 @@ class SessionManager:
                 ended_at=datetime.now(),
                 status="processing",
             )
-            diarization_job.schedule(
+            postprocess_job.schedule(
                 session.meeting_id, str(session.recorder.path)
             )
         return session
