@@ -16,6 +16,7 @@ from typing import Literal
 
 import numpy as np
 
+import diarization_job
 from database import get_db
 from packages.audio import (
     MicrophoneCapture,
@@ -326,7 +327,16 @@ class SessionManager:
             except (TimeoutError, asyncio.CancelledError):
                 session._worker_task.cancel()
         if session.meeting_id is not None:
-            end_meeting(get_db(), session.meeting_id, ended_at=datetime.now())
+            # Mark processing, then diarize in the background → ready.
+            end_meeting(
+                get_db(),
+                session.meeting_id,
+                ended_at=datetime.now(),
+                status="processing",
+            )
+            diarization_job.schedule(
+                session.meeting_id, str(session.recorder.path)
+            )
         return session
 
     def get(self, session_id: str) -> AudioSession:
