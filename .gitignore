@@ -12,6 +12,8 @@ node_modules/
 # Build artifacts
 dist/
 target/
+build/
+*.spec
 
 # Environment variables
 .env

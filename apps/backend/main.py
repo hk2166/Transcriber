@@ -59,6 +59,9 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:1420",
         "http://127.0.0.1:1420",
+        # Packaged Tauri webview origins (Day 7 sidecar).
+        "tauri://localhost",
+        "http://tauri.localhost",
     ],
     allow_credentials=True,
     allow_methods=["*"],
