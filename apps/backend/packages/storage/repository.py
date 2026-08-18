@@ -14,13 +14,31 @@ from datetime import datetime
 __all__ = [
     "Meeting",
     "Segment",
+    "Speaker",
     "create_meeting",
+    "create_speakers",
     "delete_meeting",
     "end_meeting",
     "get_meeting",
     "get_meetings",
     "get_segments",
+    "get_speakers",
     "insert_segment",
+    "rename_speaker",
+    "set_meeting_status",
+    "set_segment_speaker",
+]
+
+#: Deterministic per-speaker colours (Apple system palette), assigned by order.
+SPEAKER_COLORS = [
+    "#0A84FF",
+    "#FF9F0A",
+    "#30D158",
+    "#FF375F",
+    "#BF5AF2",
+    "#64D2FF",
+    "#FFD60A",
+    "#5E5CE6",
 ]
 
 
@@ -46,6 +64,15 @@ class Segment:
     language: str | None
     confidence: float | None
     speaker_id: int | None
+
+
+@dataclass
+class Speaker:
+    id: int
+    meeting_id: int
+    label: str  # "Speaker 1" (auto) — overridden by name
+    name: str | None  # user-assigned
+    color: str
 
 
 def _title_for(started_at: datetime) -> str:
@@ -161,6 +188,76 @@ def delete_meeting(conn: sqlite3.Connection, meeting_id: int) -> None:
     """Delete a meeting and (by cascade) its segments, speakers, summary."""
     conn.execute("DELETE FROM meetings WHERE id = ?", (meeting_id,))
     conn.commit()
+
+
+def set_meeting_status(conn: sqlite3.Connection, meeting_id: int, status: str) -> None:
+    """Update a meeting's processing status (recording|processing|ready)."""
+    conn.execute(
+        "UPDATE meetings SET status = ? WHERE id = ?", (status, meeting_id)
+    )
+    conn.commit()
+
+
+def create_speakers(
+    conn: sqlite3.Connection, meeting_id: int, labels: list[str]
+) -> dict[str, int]:
+    """Create one speaker row per unique diarization label.
+
+    Returns a mapping ``{diarization_label: speaker_id}``. Human labels
+    ("Speaker 1", …) and colours are assigned in sorted label order, so the
+    result is deterministic.
+    """
+    mapping: dict[str, int] = {}
+    for index, label in enumerate(sorted(set(labels))):
+        cursor = conn.execute(
+            "INSERT INTO speakers (meeting_id, label, name, color) "
+            "VALUES (?, ?, NULL, ?)",
+            (
+                meeting_id,
+                f"Speaker {index + 1}",
+                SPEAKER_COLORS[index % len(SPEAKER_COLORS)],
+            ),
+        )
+        mapping[label] = int(cursor.lastrowid)
+    conn.commit()
+    return mapping
+
+
+def get_speakers(conn: sqlite3.Connection, meeting_id: int) -> list[Speaker]:
+    """A meeting's speakers, in creation order."""
+    rows = conn.execute(
+        "SELECT * FROM speakers WHERE meeting_id = ? ORDER BY id", (meeting_id,)
+    ).fetchall()
+    return [
+        Speaker(
+            id=row["id"],
+            meeting_id=row["meeting_id"],
+            label=row["label"],
+            name=row["name"],
+            color=row["color"],
+        )
+        for row in rows
+    ]
+
+
+def set_segment_speaker(
+    conn: sqlite3.Connection, segment_id: int, speaker_id: int | None
+) -> None:
+    """Attribute a transcript segment to a speaker."""
+    conn.execute(
+        "UPDATE transcript_segments SET speaker_id = ? WHERE id = ?",
+        (speaker_id, segment_id),
+    )
+    conn.commit()
+
+
+def rename_speaker(conn: sqlite3.Connection, speaker_id: int, name: str) -> bool:
+    """Set a speaker's display name; return False if the speaker is unknown."""
+    cursor = conn.execute(
+        "UPDATE speakers SET name = ? WHERE id = ?", (name, speaker_id)
+    )
+    conn.commit()
+    return cursor.rowcount > 0
 
 
 def _meeting(row: sqlite3.Row) -> Meeting:

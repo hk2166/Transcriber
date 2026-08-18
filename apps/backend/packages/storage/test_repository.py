@@ -7,12 +7,17 @@ import pytest
 from packages.storage import (
     connect,
     create_meeting,
+    create_speakers,
     delete_meeting,
     end_meeting,
     get_meeting,
     get_meetings,
     get_segments,
+    get_speakers,
     insert_segment,
+    rename_speaker,
+    set_meeting_status,
+    set_segment_speaker,
 )
 
 
@@ -99,3 +104,39 @@ def test_delete_meeting_cascades_to_segments(conn):
 
 def test_get_missing_meeting_returns_none(conn):
     assert get_meeting(conn, 999) is None
+
+
+def test_create_speakers_deterministic_labels_and_colors(conn):
+    meeting_id = _new_meeting(conn)
+    mapping = create_speakers(conn, meeting_id, ["SPEAKER_01", "SPEAKER_00", "SPEAKER_00"])
+    assert set(mapping) == {"SPEAKER_00", "SPEAKER_01"}
+
+    speakers = get_speakers(conn, meeting_id)
+    assert [s.label for s in speakers] == ["Speaker 1", "Speaker 2"]
+    assert speakers[0].color != speakers[1].color
+    # sorted label order: SPEAKER_00 → Speaker 1
+    assert mapping["SPEAKER_00"] == speakers[0].id
+
+
+def test_set_segment_speaker_and_readback(conn):
+    meeting_id = _new_meeting(conn)
+    seg_id = insert_segment(conn, meeting_id, text="hi", start_ms=0, end_ms=500,
+                            language="en", confidence=0.9)
+    mapping = create_speakers(conn, meeting_id, ["SPEAKER_00"])
+    set_segment_speaker(conn, seg_id, mapping["SPEAKER_00"])
+    assert get_segments(conn, meeting_id)[0].speaker_id == mapping["SPEAKER_00"]
+
+
+def test_rename_speaker(conn):
+    meeting_id = _new_meeting(conn)
+    mapping = create_speakers(conn, meeting_id, ["SPEAKER_00"])
+    speaker_id = mapping["SPEAKER_00"]
+    assert rename_speaker(conn, speaker_id, "Alice") is True
+    assert get_speakers(conn, meeting_id)[0].name == "Alice"
+    assert rename_speaker(conn, 999, "Nobody") is False
+
+
+def test_set_meeting_status(conn):
+    meeting_id = _new_meeting(conn)
+    set_meeting_status(conn, meeting_id, "processing")
+    assert get_meeting(conn, meeting_id).status == "processing"
