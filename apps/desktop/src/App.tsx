@@ -4,9 +4,11 @@ import {
   getMeetingSegments,
   getMeetings,
   getMeetingSpeakers,
+  getMeetingSummary,
   renameSpeaker,
   type AudioSource,
   type Meeting,
+  type MeetingSummary,
   type Speaker,
   type TranscriptSegment,
 } from "./api";
@@ -14,6 +16,7 @@ import { APP_NAME } from "./config";
 import { LiveTranscript } from "./LiveTranscript";
 import { RecordButton } from "./RecordButton";
 import { SourceSelector } from "./SourceSelector";
+import { SummaryPanel } from "./SummaryPanel";
 import { useRecorder, type RecorderStatus } from "./useRecorder";
 import { VolumeMeter } from "./VolumeMeter";
 
@@ -59,6 +62,7 @@ function App() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [pastSegments, setPastSegments] = useState<TranscriptSegment[]>([]);
   const [pastSpeakers, setPastSpeakers] = useState<Speaker[]>([]);
+  const [pastSummary, setPastSummary] = useState<MeetingSummary | null>(null);
 
   const recording = status === "recording";
   const busy = status === "starting" || status === "stopping";
@@ -81,15 +85,18 @@ function App() {
   const selectMeeting = async (id: number) => {
     setSelectedId(id);
     try {
-      const [segments, speakers] = await Promise.all([
+      const [segments, speakers, summary] = await Promise.all([
         getMeetingSegments(id),
         getMeetingSpeakers(id),
+        getMeetingSummary(id),
       ]);
       setPastSegments(segments);
       setPastSpeakers(speakers);
+      setPastSummary(summary);
     } catch {
       setPastSegments([]);
       setPastSpeakers([]);
+      setPastSummary(null);
     }
   };
 
@@ -106,6 +113,7 @@ function App() {
     setSelectedId(null);
     setPastSegments([]);
     setPastSpeakers([]);
+    setPastSummary(null);
   };
 
   const handleToggle = () => {
@@ -181,6 +189,12 @@ function App() {
               speechActive={false}
               speakers={pastSpeakers}
               onRenameSpeaker={handleRenameSpeaker}
+              header={
+                <SummaryPanel
+                  summary={pastSummary}
+                  processing={selectedMeeting.status === "processing"}
+                />
+              }
             />
           </>
         ) : (

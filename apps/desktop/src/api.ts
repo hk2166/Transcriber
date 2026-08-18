@@ -33,6 +33,14 @@ export interface Speaker {
   color: string;
 }
 
+export interface MeetingSummary {
+  summary: string;
+  key_points: string[];
+  action_items: string[];
+  decisions: string[];
+  open_questions: string[];
+}
+
 export interface Meeting {
   id: number;
   title: string;
@@ -98,6 +106,16 @@ export function getMeetingSegments(id: number): Promise<TranscriptSegment[]> {
 
 export function getMeetingSpeakers(id: number): Promise<Speaker[]> {
   return getJson<Speaker[]>(`/meetings/${id}/speakers`);
+}
+
+export async function getMeetingSummary(
+  id: number,
+): Promise<MeetingSummary | null> {
+  try {
+    return await getJson<MeetingSummary>(`/meetings/${id}/summary`);
+  } catch {
+    return null; // 404 = not generated yet (or Ollama was unavailable)
+  }
 }
 
 export function renameSpeaker(

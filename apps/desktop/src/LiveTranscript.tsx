@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import type { Speaker, TranscriptSegment } from "./api";
 
@@ -8,6 +8,7 @@ interface LiveTranscriptProps {
   speechActive: boolean;
   speakers?: Speaker[];
   onRenameSpeaker?: (speakerId: number, name: string) => void;
+  header?: ReactNode;
 }
 
 function formatTimestamp(ms: number): string {
@@ -75,6 +76,7 @@ export function LiveTranscript({
   speechActive,
   speakers,
   onRenameSpeaker,
+  header,
 }: LiveTranscriptProps) {
   const endRef = useRef<HTMLDivElement | null>(null);
   const speakerById = useMemo(
@@ -98,6 +100,7 @@ export function LiveTranscript({
 
   return (
     <div className="transcript">
+      {header}
       {speakers && speakers.length > 0 && (
         <div className="speaker-legend">
           {speakers.map((speaker) => (

@@ -360,6 +360,58 @@ body {
   animation: speech-pulse 1.4s ease-in-out infinite;
 }
 
+/* ===== Summary panel (Day 9) ===== */
+.summary {
+  max-width: 760px;
+  margin: 0 auto 24px;
+  padding: 20px;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.summary--pending {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.summary__overview {
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+.summary__section { margin-top: 16px; }
+.summary__heading {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-tertiary);
+  margin-bottom: 6px;
+}
+.summary__list {
+  list-style: disc;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-primary);
+}
+.summary__list--checks {
+  list-style: none;
+  padding-left: 0;
+}
+.summary__check {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  cursor: pointer;
+}
+.summary__check input { margin-top: 2px; accent-color: var(--accent); }
+
 /* ===== Control bar (Day 5) ===== */
 .controlbar {
   flex-shrink: 0;
