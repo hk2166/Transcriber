@@ -6,9 +6,11 @@ import {
   getMeetingSpeakers,
   getMeetingSummary,
   renameSpeaker,
+  searchSegments,
   type AudioSource,
   type Meeting,
   type MeetingSummary,
+  type SearchResult,
   type Speaker,
   type TranscriptSegment,
 } from "./api";
@@ -63,6 +65,8 @@ function App() {
   const [pastSegments, setPastSegments] = useState<TranscriptSegment[]>([]);
   const [pastSpeakers, setPastSpeakers] = useState<Speaker[]>([]);
   const [pastSummary, setPastSummary] = useState<MeetingSummary | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
 
   const recording = status === "recording";
   const busy = status === "starting" || status === "stopping";
@@ -81,6 +85,23 @@ function App() {
   useEffect(() => {
     if (idle) refreshMeetings();
   }, [idle, refreshMeetings]);
+
+  // Debounced semantic search.
+  useEffect(() => {
+    const query = searchQuery.trim();
+    if (!query) {
+      setSearchResults([]);
+      return;
+    }
+    const id = setTimeout(async () => {
+      try {
+        setSearchResults(await searchSegments(query));
+      } catch {
+        setSearchResults([]);
+      }
+    }, 250);
+    return () => clearTimeout(id);
+  }, [searchQuery]);
 
   const selectMeeting = async (id: number) => {
     setSelectedId(id);
@@ -116,6 +137,11 @@ function App() {
     setPastSummary(null);
   };
 
+  const openResult = (meetingId: number) => {
+    setSearchQuery("");
+    selectMeeting(meetingId);
+  };
+
   const handleToggle = () => {
     if (recording) {
       stop();
@@ -138,6 +164,14 @@ function App() {
         <button className="new-meeting" onClick={newRecording} disabled={!idle}>
           <span aria-hidden>＋</span> New meeting
         </button>
+
+        <input
+          className="search-input"
+          type="search"
+          placeholder="Search all meetings…"
+          value={searchQuery}
+          onChange={(event) => setSearchQuery(event.target.value)}
+        />
 
         <nav className="meeting-list">
           {meetings.length === 0 ? (
@@ -171,7 +205,39 @@ function App() {
       </aside>
 
       <main className="main">
-        {viewingPast ? (
+        {searchQuery.trim() ? (
+          <>
+            <header className="topbar">
+              <div className="topbar__title">
+                <h2>Search</h2>
+                <p className="topbar__sub">
+                  {searchResults.length} result
+                  {searchResults.length === 1 ? "" : "s"} for “{searchQuery.trim()}”
+                </p>
+              </div>
+            </header>
+            <div className="transcript">
+              <div className="search-results">
+                {searchResults.length === 0 ? (
+                  <p className="meeting-list__empty">No matches yet</p>
+                ) : (
+                  searchResults.map((result) => (
+                    <button
+                      className="search-result"
+                      key={result.segment_id}
+                      onClick={() => openResult(result.meeting_id)}
+                    >
+                      <span className="search-result__meta">
+                        {result.meeting_title}
+                      </span>
+                      <span className="search-result__text">{result.text}</span>
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+          </>
+        ) : viewingPast ? (
           <>
             <header className="topbar">
               <div className="topbar__title">

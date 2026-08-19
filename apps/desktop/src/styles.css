@@ -84,6 +84,50 @@ body {
 .new-meeting:hover { background: var(--border); }
 .new-meeting:active { transform: scale(0.97); }
 
+.search-input {
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--text-primary);
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  outline: none;
+}
+.search-input::placeholder { color: var(--text-tertiary); }
+.search-input:focus { border-color: var(--accent); }
+
+.search-results {
+  max-width: 760px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.search-result {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  text-align: left;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: border-color 120ms ease;
+}
+.search-result:hover { border-color: var(--accent); }
+.search-result__meta {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+}
+.search-result__text {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-primary);
+}
+
 .meeting-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
 .meeting-list__empty {
   font-size: 13px; color: var(--text-tertiary);

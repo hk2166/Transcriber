@@ -96,8 +96,21 @@ async function getJson<T>(path: string): Promise<T> {
   return (await res.json()) as T;
 }
 
+export interface SearchResult {
+  meeting_id: number;
+  meeting_title: string;
+  segment_id: number;
+  text: string;
+  start_ms: number;
+  score: number;
+}
+
 export function getMeetings(): Promise<Meeting[]> {
   return getJson<Meeting[]>("/meetings");
+}
+
+export function searchSegments(query: string): Promise<SearchResult[]> {
+  return postJson<SearchResult[]>("/search", { query, k: 20 });
 }
 
 export function getMeetingSegments(id: number): Promise<TranscriptSegment[]> {
