@@ -113,6 +113,60 @@ export function searchSegments(query: string): Promise<SearchResult[]> {
   return postJson<SearchResult[]>("/search", { query, k: 20 });
 }
 
+export interface ChatSource {
+  segment_id: number;
+  text: string;
+  score: number;
+}
+
+interface ChatHandlers {
+  onSources?: (sources: ChatSource[]) => void;
+  onToken?: (token: string) => void;
+  onError?: (message: string) => void;
+}
+
+/** POST a question and consume the SSE stream (sources → tokens → done). */
+export async function streamChat(
+  meetingId: number,
+  question: string,
+  handlers: ChatHandlers,
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/meetings/${meetingId}/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ question }),
+  });
+  if (!res.ok || !res.body) {
+    throw new ApiError(res.status, res.statusText);
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    let sep: number;
+    while ((sep = buffer.indexOf("\n\n")) !== -1) {
+      const chunk = buffer.slice(0, sep);
+      buffer = buffer.slice(sep + 2);
+
+      const lines = chunk.split("\n");
+      const event = lines.find((l) => l.startsWith("event:"))?.slice(6).trim();
+      const dataLine = lines.find((l) => l.startsWith("data:"))?.slice(5).trim();
+      if (!event || !dataLine) continue;
+      const data = JSON.parse(dataLine);
+
+      if (event === "sources") handlers.onSources?.(data.sources);
+      else if (event === "token") handlers.onToken?.(data.text);
+      else if (event === "error") handlers.onError?.(data.message);
+    }
+  }
+}
+
 export function getMeetingSegments(id: number): Promise<TranscriptSegment[]> {
   return getJson<TranscriptSegment[]>(`/meetings/${id}/segments`);
 }

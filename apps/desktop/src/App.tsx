@@ -16,6 +16,7 @@ import {
 } from "./api";
 import { APP_NAME } from "./config";
 import { LiveTranscript } from "./LiveTranscript";
+import { MeetingChat } from "./MeetingChat";
 import { RecordButton } from "./RecordButton";
 import { SourceSelector } from "./SourceSelector";
 import { SummaryPanel } from "./SummaryPanel";
@@ -67,6 +68,7 @@ function App() {
   const [pastSummary, setPastSummary] = useState<MeetingSummary | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [meetingTab, setMeetingTab] = useState<"transcript" | "chat">("transcript");
 
   const recording = status === "recording";
   const busy = status === "starting" || status === "stopping";
@@ -105,6 +107,7 @@ function App() {
 
   const selectMeeting = async (id: number) => {
     setSelectedId(id);
+    setMeetingTab("transcript");
     try {
       const [segments, speakers, summary] = await Promise.all([
         getMeetingSegments(id),
@@ -248,20 +251,38 @@ function App() {
                     : `${selectedMeeting.segment_count} segments · ${SOURCE_LABEL[selectedMeeting.source]}`}
                 </p>
               </div>
+              <div className="tab-bar">
+                <button
+                  className={"tab" + (meetingTab === "transcript" ? " tab--active" : "")}
+                  onClick={() => setMeetingTab("transcript")}
+                >
+                  Transcript
+                </button>
+                <button
+                  className={"tab" + (meetingTab === "chat" ? " tab--active" : "")}
+                  onClick={() => setMeetingTab("chat")}
+                >
+                  Chat
+                </button>
+              </div>
             </header>
-            <LiveTranscript
-              segments={pastSegments}
-              recording={false}
-              speechActive={false}
-              speakers={pastSpeakers}
-              onRenameSpeaker={handleRenameSpeaker}
-              header={
-                <SummaryPanel
-                  summary={pastSummary}
-                  processing={selectedMeeting.status === "processing"}
-                />
-              }
-            />
+            {meetingTab === "chat" ? (
+              <MeetingChat meetingId={selectedMeeting.id} />
+            ) : (
+              <LiveTranscript
+                segments={pastSegments}
+                recording={false}
+                speechActive={false}
+                speakers={pastSpeakers}
+                onRenameSpeaker={handleRenameSpeaker}
+                header={
+                  <SummaryPanel
+                    summary={pastSummary}
+                    processing={selectedMeeting.status === "processing"}
+                  />
+                }
+              />
+            )}
           </>
         ) : (
           <>
