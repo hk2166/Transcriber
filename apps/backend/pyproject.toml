@@ -30,6 +30,8 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["."]
 pythonpath = ["."]
+# The e2e suite loads real models (~35 s) — run it explicitly: pytest tests/e2e
+addopts = "--ignore=tests/e2e"
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
 
