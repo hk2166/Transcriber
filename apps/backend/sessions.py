@@ -28,6 +28,7 @@ from packages.audio import (
 from packages.storage import create_meeting, end_meeting, insert_segment
 from packages.transcription import TranscriptSegment, WhisperTranscriber
 from packages.vad import SileroVAD, SpeechSegment, SpeechSegmenter
+from settings import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -45,22 +46,21 @@ AudioSource = Literal["mic", "system", "both"]
 #: audio only — the recorder tee always receives every block.
 STREAM_QUEUE_MAXSIZE = 256
 
-WHISPER_MODEL_SIZE = "small"
-
 _transcriber: WhisperTranscriber | None = None
 _transcriber_lock = threading.Lock()
+
 
 def get_transcriber() -> WhisperTranscriber:
     """
     Return the process-wide Whisper model, loading it once on first use.
 
-    Blocking (model load is multi-second) — call it from a worker thread via
-    ``asyncio.to_thread``, never directly on the event loop.
+    Uses the configured model size (a change takes effect on restart, since the
+    model is loaded once). Blocking — call from a worker thread.
     """
     global _transcriber
     with _transcriber_lock:
         if _transcriber is None:
-            _transcriber = WhisperTranscriber(model_size=WHISPER_MODEL_SIZE)
+            _transcriber = WhisperTranscriber(model_size=get_settings().whisper_model)
         return _transcriber
     
 
@@ -106,8 +106,11 @@ class AudioSession:
         # sees every block; it drives the live "speaking" dot and feeds the
         # transcriber worker.
         self.vad_enabled = vad_enabled
+        threshold = get_settings().vad_threshold
         self._segmenter: SpeechSegmenter | None = (
-            SpeechSegmenter(SileroVAD()) if vad_enabled else None
+            SpeechSegmenter(SileroVAD(threshold=threshold), threshold=threshold)
+            if vad_enabled
+            else None
         )
         self._speech_active = False
 

@@ -52,6 +52,13 @@ def get_embedder() -> Embedder:
     return _get_embedder()
 
 
+def reset() -> None:
+    """Forget the loaded index (after a data reset)."""
+    global _store
+    with _lock:
+        _store = None
+
+
 def _get_store() -> VectorStore:
     global _store
     with _lock:

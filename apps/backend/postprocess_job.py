@@ -29,6 +29,7 @@ from packages.storage import (
     set_meeting_title,
     set_segment_speaker,
 )
+from settings import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +106,8 @@ async def run_postprocess(meeting_id: int, wav_path: str) -> None:
     # Reload so the transcript carries the speaker attributions we just wrote.
     segments = get_segments(db, meeting_id)
     try:
-        await _summarize(meeting_id, segments)
+        if get_settings().auto_summarize:
+            await _summarize(meeting_id, segments)
     except OllamaUnavailable:
         logger.warning("Ollama unavailable — no summary for meeting %d.", meeting_id)
     except Exception:

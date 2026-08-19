@@ -18,6 +18,7 @@ from routers.chat import router as chat_router
 from routers.export import router as export_router
 from routers.meetings import router as meetings_router
 from routers.search import router as search_router
+from routers.settings import router as settings_router
 from routers.speakers import router as speakers_router
 from routers.transcription import router as transcription_router
 
@@ -79,6 +80,7 @@ app.include_router(speakers_router)
 app.include_router(search_router)
 app.include_router(chat_router)
 app.include_router(export_router)
+app.include_router(settings_router)
 
 @app.get("/health", tags=["meta"])
 async def health() -> dict[str, str]:
