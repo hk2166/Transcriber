@@ -105,6 +105,43 @@ export interface SearchResult {
   score: number;
 }
 
+export interface Settings {
+  whisper_model: string;
+  ollama_model: string;
+  vad_threshold: number;
+  default_source: AudioSource;
+  auto_summarize: boolean;
+}
+
+export interface SystemStatus {
+  ollama_available: boolean;
+  ollama_models: string[];
+  blackhole_available: boolean;
+  whisper_model: string;
+}
+
+export function getSettings(): Promise<Settings> {
+  return getJson<Settings>("/settings");
+}
+
+export async function putSettings(settings: Settings): Promise<Settings> {
+  const res = await fetch(`${API_BASE}/settings`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(settings),
+  });
+  if (!res.ok) throw new ApiError(res.status, res.statusText);
+  return (await res.json()) as Settings;
+}
+
+export function getSystemStatus(): Promise<SystemStatus> {
+  return getJson<SystemStatus>("/system/status");
+}
+
+export function resetAllData(): Promise<{ reset: boolean }> {
+  return postJson<{ reset: boolean }>("/system/reset");
+}
+
 export function getMeetings(): Promise<Meeting[]> {
   return getJson<Meeting[]>("/meetings");
 }

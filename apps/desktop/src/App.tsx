@@ -19,6 +19,7 @@ import { ExportMenu } from "./ExportMenu";
 import { LiveTranscript } from "./LiveTranscript";
 import { MeetingChat } from "./MeetingChat";
 import { RecordButton } from "./RecordButton";
+import { SettingsPanel } from "./SettingsPanel";
 import { SourceSelector } from "./SourceSelector";
 import { SummaryPanel } from "./SummaryPanel";
 import { useRecorder, type RecorderStatus } from "./useRecorder";
@@ -70,6 +71,7 @@ function App() {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [meetingTab, setMeetingTab] = useState<"transcript" | "chat">("transcript");
+  const [showSettings, setShowSettings] = useState(false);
 
   const recording = status === "recording";
   const busy = status === "starting" || status === "stopping";
@@ -205,8 +207,25 @@ function App() {
         <div className="sidebar__footer">
           <span className={"dot " + (connected ? "dot--ok" : "dot--off")} />
           {connected ? "Backend connected" : "Backend offline"}
+          <button
+            className="sidebar__settings"
+            onClick={() => setShowSettings(true)}
+            aria-label="Settings"
+          >
+            ⚙
+          </button>
         </div>
       </aside>
+
+      {showSettings && (
+        <SettingsPanel
+          onClose={() => setShowSettings(false)}
+          onReset={() => {
+            newRecording();
+            refreshMeetings();
+          }}
+        />
+      )}
 
       <main className="main">
         {searchQuery.trim() ? (
