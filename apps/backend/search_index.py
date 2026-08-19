@@ -47,6 +47,11 @@ def _get_embedder() -> Embedder:
     return _embedder
 
 
+def get_embedder() -> Embedder:
+    """Public accessor for the shared embedder (reused by RAG chat)."""
+    return _get_embedder()
+
+
 def _get_store() -> VectorStore:
     global _store
     with _lock:
