@@ -111,6 +111,14 @@ async def run_postprocess(meeting_id: int, wav_path: str) -> None:
     except Exception:
         logger.exception("Summary failed for meeting %d.", meeting_id)
 
+    try:
+        # Lazy import keeps the embedder off the live-capture import path.
+        import search_index
+
+        await asyncio.to_thread(search_index.index_meeting, meeting_id)
+    except Exception:
+        logger.exception("Indexing failed for meeting %d.", meeting_id)
+
     set_meeting_status(db, meeting_id, "ready")
     logger.info("Post-processing complete for meeting %d.", meeting_id)
 

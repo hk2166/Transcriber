@@ -198,6 +198,31 @@ def get_segments(conn: sqlite3.Connection, meeting_id: int) -> list[Segment]:
     ]
 
 
+def get_segments_by_ids(
+    conn: sqlite3.Connection, ids: list[int]
+) -> dict[int, Segment]:
+    """Fetch segments by id, keyed by id (for mapping search hits to text)."""
+    if not ids:
+        return {}
+    placeholders = ",".join("?" * len(ids))
+    rows = conn.execute(
+        f"SELECT * FROM transcript_segments WHERE id IN ({placeholders})", ids
+    ).fetchall()
+    return {
+        row["id"]: Segment(
+            id=row["id"],
+            meeting_id=row["meeting_id"],
+            text=row["text"],
+            start_ms=row["start_ms"],
+            end_ms=row["end_ms"],
+            language=row["language"],
+            confidence=row["confidence"],
+            speaker_id=row["speaker_id"],
+        )
+        for row in rows
+    }
+
+
 def delete_meeting(conn: sqlite3.Connection, meeting_id: int) -> None:
     """Delete a meeting and (by cascade) its segments, speakers, summary."""
     conn.execute("DELETE FROM meetings WHERE id = ?", (meeting_id,))

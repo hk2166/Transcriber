@@ -82,4 +82,7 @@ def remove_meeting(meeting_id: int) -> dict[str, bool]:
     if meeting.wav_path:
         Path(meeting.wav_path).unlink(missing_ok=True)
     delete_meeting(get_db(), meeting_id)
+    import search_index
+
+    search_index.remove_meeting(meeting_id)
     return {"deleted": True}
