@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { downloadExport } from "./api";
+import { toast } from "./toast";
 
 const FORMATS = [
   { key: "markdown", label: "Markdown (.md)" },
@@ -36,7 +37,7 @@ export function ExportMenu({
     try {
       await downloadExport(meetingId, format, title);
     } catch {
-      // Surfacing export errors is a Day-14 hardening concern.
+      toast(`Couldn't export as ${format}.`);
     }
   };
 

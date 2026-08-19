@@ -107,27 +107,39 @@ export function useRecorder() {
         setState((s) => ({ ...s, error: "Audio stream error." }));
       };
 
-      // Transcript stream — text as speech is recognised.
-      const transcriptWs = new WebSocket(
-        `${WS_BASE}/transcription/stream/${session.session_id}`,
-      );
-      transcriptWsRef.current = transcriptWs;
-      transcriptWs.onmessage = (event) => {
-        const msg = JSON.parse(event.data);
-        if (msg.type === "end") {
-          closeSocket(transcriptWsRef);
-          return;
-        }
-        if (msg.type !== "transcript") return;
-        const segment: TranscriptSegment = {
-          text: msg.text,
-          start_ms: msg.start_ms,
-          end_ms: msg.end_ms,
-          language: msg.language,
-          confidence: msg.confidence,
+      // Transcript stream — text as speech is recognised. Reconnects if the
+      // socket drops mid-recording (the backend keeps recording regardless, so
+      // no data is lost — this just resumes the live view).
+      const connectTranscript = (sessionId: string, attempt: number) => {
+        const ws = new WebSocket(`${WS_BASE}/transcription/stream/${sessionId}`);
+        transcriptWsRef.current = ws;
+        ws.onmessage = (event) => {
+          const msg = JSON.parse(event.data);
+          if (msg.type === "end") {
+            closeSocket(transcriptWsRef);
+            return;
+          }
+          if (msg.type !== "transcript") return;
+          const segment: TranscriptSegment = {
+            text: msg.text,
+            start_ms: msg.start_ms,
+            end_ms: msg.end_ms,
+            language: msg.language,
+            confidence: msg.confidence,
+          };
+          setState((s) => ({ ...s, transcripts: [...s.transcripts, segment] }));
         };
-        setState((s) => ({ ...s, transcripts: [...s.transcripts, segment] }));
+        ws.onclose = () => {
+          // Not intentionally closed (ref still points here) and attempts left.
+          if (transcriptWsRef.current === ws && attempt < 3) {
+            setTimeout(
+              () => connectTranscript(sessionId, attempt + 1),
+              600 * (attempt + 1),
+            );
+          }
+        };
       };
+      connectTranscript(session.session_id, 0);
 
       setState((s) => ({
         ...s,

@@ -22,6 +22,8 @@ import { RecordButton } from "./RecordButton";
 import { SettingsPanel } from "./SettingsPanel";
 import { SourceSelector } from "./SourceSelector";
 import { SummaryPanel } from "./SummaryPanel";
+import { toast } from "./toast";
+import { Toasts } from "./Toasts";
 import { useRecorder, type RecorderStatus } from "./useRecorder";
 import { VolumeMeter } from "./VolumeMeter";
 
@@ -124,6 +126,7 @@ function App() {
       setPastSegments([]);
       setPastSpeakers([]);
       setPastSummary(null);
+      toast("Couldn't load that meeting.");
     }
   };
 
@@ -226,6 +229,8 @@ function App() {
           }}
         />
       )}
+
+      <Toasts />
 
       <main className="main">
         {searchQuery.trim() ? (
