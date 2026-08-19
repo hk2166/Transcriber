@@ -119,6 +119,27 @@ export interface ChatSource {
   score: number;
 }
 
+// Dev/browser download. In the packaged Tauri app this is swapped for the
+// native save dialog (plugin-dialog + plugin-fs) alongside the Day-16 sidecar.
+export async function downloadExport(
+  meetingId: number,
+  format: string,
+  title: string,
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/meetings/${meetingId}/export/${format}`);
+  if (!res.ok) throw new ApiError(res.status, res.statusText);
+  const blob = await res.blob();
+  const ext = format === "markdown" ? "md" : format;
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `${title}.${ext}`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
 interface ChatHandlers {
   onSources?: (sources: ChatSource[]) => void;
   onToken?: (token: string) => void;

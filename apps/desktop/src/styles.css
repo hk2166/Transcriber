@@ -404,6 +404,26 @@ body {
   animation: speech-pulse 1.4s ease-in-out infinite;
 }
 
+/* ===== Export menu (Day 12) ===== */
+.export-menu { position: relative; }
+.export-menu__button {
+  padding: 6px 12px; font-size: 13px; font-weight: 500;
+  color: var(--text-primary); background: var(--bg-hover);
+  border: 1px solid var(--border); border-radius: 8px;
+}
+.export-menu__button:hover { background: var(--border); }
+.export-menu__list {
+  position: absolute; right: 0; top: calc(100% + 4px); z-index: 10;
+  display: flex; flex-direction: column; min-width: 160px; padding: 4px;
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+}
+.export-menu__list button {
+  padding: 8px 10px; font-size: 13px; text-align: left;
+  color: var(--text-primary); background: transparent; border: none; border-radius: 6px;
+}
+.export-menu__list button:hover { background: var(--bg-hover); }
+
 /* ===== Meeting tabs + chat (Day 11) ===== */
 .tab-bar { display: inline-flex; gap: 2px; padding: 3px; background: var(--bg-hover); border-radius: var(--radius); }
 .tab {

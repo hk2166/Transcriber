@@ -15,6 +15,7 @@ import {
   type TranscriptSegment,
 } from "./api";
 import { APP_NAME } from "./config";
+import { ExportMenu } from "./ExportMenu";
 import { LiveTranscript } from "./LiveTranscript";
 import { MeetingChat } from "./MeetingChat";
 import { RecordButton } from "./RecordButton";
@@ -251,19 +252,25 @@ function App() {
                     : `${selectedMeeting.segment_count} segments · ${SOURCE_LABEL[selectedMeeting.source]}`}
                 </p>
               </div>
-              <div className="tab-bar">
-                <button
-                  className={"tab" + (meetingTab === "transcript" ? " tab--active" : "")}
-                  onClick={() => setMeetingTab("transcript")}
-                >
-                  Transcript
-                </button>
-                <button
-                  className={"tab" + (meetingTab === "chat" ? " tab--active" : "")}
-                  onClick={() => setMeetingTab("chat")}
-                >
-                  Chat
-                </button>
+              <div className="topbar__right">
+                <div className="tab-bar">
+                  <button
+                    className={"tab" + (meetingTab === "transcript" ? " tab--active" : "")}
+                    onClick={() => setMeetingTab("transcript")}
+                  >
+                    Transcript
+                  </button>
+                  <button
+                    className={"tab" + (meetingTab === "chat" ? " tab--active" : "")}
+                    onClick={() => setMeetingTab("chat")}
+                  >
+                    Chat
+                  </button>
+                </div>
+                <ExportMenu
+                  meetingId={selectedMeeting.id}
+                  title={selectedMeeting.title}
+                />
               </div>
             </header>
             {meetingTab === "chat" ? (
