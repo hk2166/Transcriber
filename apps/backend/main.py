@@ -73,6 +73,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request, exc):
+    """Never leak a stack trace to the client — log it, return a friendly 500."""
+    from fastapi.responses import JSONResponse
+
+    logger.exception("Unhandled error on %s %s", request.method, request.url.path)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Something went wrong on the backend. Please try again."},
+    )
+
+
 app.include_router(audio_router)
 app.include_router(transcription_router)
 app.include_router(meetings_router)
