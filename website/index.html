@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Confab — Private, on-device AI meeting notes for Mac</title>
+<meta name="description" content="Confab records, transcribes, and summarizes your meetings entirely on your Mac. No cloud, no bots, no subscription. Your meetings never leave your machine." />
+<style>
+  :root {
+    --bg: #0b0b12;
+    --panel: #14141f;
+    --panel-2: #1a1a28;
+    --text: #ececf4;
+    --muted: #9a9ab0;
+    --indigo: #6366f1;
+    --purple: #9333ea;
+    --line: #26263a;
+    --radius: 16px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 0 24px; }
+  a { color: var(--indigo); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  header { padding: 28px 0; display: flex; align-items: center; gap: 12px; }
+  header .logo { width: 36px; height: 36px; }
+  header .name { font-weight: 700; font-size: 20px; letter-spacing: -0.02em; }
+  header nav { margin-left: auto; display: flex; gap: 24px; font-size: 15px; }
+  header nav a { color: var(--muted); }
+
+  .hero { text-align: center; padding: 72px 0 56px; }
+  .hero .logo { width: 96px; height: 96px; margin-bottom: 28px; }
+  h1 {
+    font-size: clamp(34px, 6vw, 56px);
+    line-height: 1.1;
+    letter-spacing: -0.03em;
+    font-weight: 800;
+  }
+  h1 .grad {
+    background: linear-gradient(135deg, var(--indigo), var(--purple));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .hero p.sub {
+    margin: 20px auto 0;
+    max-width: 620px;
+    color: var(--muted);
+    font-size: 19px;
+  }
+  .cta { margin-top: 36px; display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+  .btn {
+    display: inline-block;
+    padding: 14px 28px;
+    border-radius: 12px;
+    font-weight: 600;
+    font-size: 16px;
+  }
+  .btn-primary {
+    background: linear-gradient(135deg, var(--indigo), var(--purple));
+    color: #fff;
+  }
+  .btn-primary:hover { filter: brightness(1.1); text-decoration: none; }
+  .btn-ghost { border: 1px solid var(--line); color: var(--text); }
+  .btn-ghost:hover { border-color: var(--indigo); text-decoration: none; }
+  .cta-note { margin-top: 14px; color: var(--muted); font-size: 13.5px; }
+
+  .privacy {
+    margin: 48px 0;
+    padding: 28px 32px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    text-align: center;
+  }
+  .privacy strong { font-size: 18px; }
+  .privacy p { color: var(--muted); margin-top: 8px; }
+
+  .features {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+    margin: 24px 0 64px;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 24px;
+  }
+  .card h3 { font-size: 17px; margin-bottom: 8px; letter-spacing: -0.01em; }
+  .card p { color: var(--muted); font-size: 15px; }
+  .card .emoji { font-size: 24px; display: block; margin-bottom: 12px; }
+
+  h2 { font-size: 28px; letter-spacing: -0.02em; margin: 64px 0 20px; }
+
+  details {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 18px 22px;
+    margin-bottom: 10px;
+  }
+  details summary { cursor: pointer; font-weight: 600; }
+  details p { color: var(--muted); margin-top: 10px; }
+  details a { color: var(--indigo); }
+
+  footer {
+    margin-top: 80px;
+    padding: 32px 0 48px;
+    border-top: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 14px;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <svg class="logo" viewBox="0 0 1024 1024" aria-hidden="true">
+      <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#6366f1"/><stop offset="1" stop-color="#9333ea"/>
+      </linearGradient></defs>
+      <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#g)"/>
+      <g fill="#fff">
+        <rect x="242" y="402" width="72" height="220" rx="36"/>
+        <rect x="356" y="322" width="72" height="380" rx="36"/>
+        <rect x="470" y="242" width="72" height="540" rx="36"/>
+        <rect x="584" y="322" width="72" height="380" rx="36"/>
+        <rect x="698" y="402" width="72" height="220" rx="36"/>
+      </g>
+    </svg>
+    <span class="name">Confab</span>
+    <nav>
+      <a href="#features">Features</a>
+      <a href="#faq">FAQ</a>
+      <a href="https://github.com/hk2166/Transcriber">GitHub</a>
+    </nav>
+  </header>
+
+  <section class="hero">
+    <svg class="logo" viewBox="0 0 1024 1024" aria-hidden="true">
+      <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#g)"/>
+      <g fill="#fff">
+        <rect x="242" y="402" width="72" height="220" rx="36"/>
+        <rect x="356" y="322" width="72" height="380" rx="36"/>
+        <rect x="470" y="242" width="72" height="540" rx="36"/>
+        <rect x="584" y="322" width="72" height="380" rx="36"/>
+        <rect x="698" y="402" width="72" height="220" rx="36"/>
+      </g>
+    </svg>
+    <h1>Your meetings<br /><span class="grad">never leave your Mac.</span></h1>
+    <p class="sub">
+      Confab records, transcribes, and summarizes your meetings with AI that runs
+      entirely on your machine. No cloud. No bots in your calls. No subscription.
+    </p>
+    <div class="cta">
+      <a class="btn btn-primary" href="https://github.com/hk2166/Transcriber/releases/latest">Download for Mac</a>
+      <a class="btn btn-ghost" href="#features">See what it does</a>
+    </div>
+    <p class="cta-note">Free · macOS 13.3+ · Apple Silicon recommended</p>
+  </section>
+
+  <div class="privacy">
+    <strong>🔒 Actually private — not "privacy-washed."</strong>
+    <p>
+      Every model — speech recognition, summarization, search — runs locally.
+      The app makes zero network calls with your audio or transcripts. Unplug
+      your Wi-Fi mid-meeting; nothing breaks.
+    </p>
+  </div>
+
+  <h2 id="features">Everything a meeting assistant should do</h2>
+  <section class="features">
+    <div class="card"><span class="emoji">⚡️</span><h3>Live transcription</h3>
+      <p>Words appear on screen about two seconds after they're spoken, powered by Whisper running on your Mac.</p></div>
+    <div class="card"><span class="emoji">🧠</span><h3>AI summaries</h3>
+      <p>Every meeting ends with a summary, key points, action items, decisions, and open questions — written by a local LLM via Ollama.</p></div>
+    <div class="card"><span class="emoji">🔎</span><h3>Search by meaning</h3>
+      <p>"What did we say about the deadline?" Semantic search finds it across every meeting you've ever recorded, in milliseconds.</p></div>
+    <div class="card"><span class="emoji">💬</span><h3>Chat with a meeting</h3>
+      <p>Ask questions and get answers grounded in the transcript, with citations pointing at the exact moments.</p></div>
+    <div class="card"><span class="emoji">🎧</span><h3>Both sides of the call</h3>
+      <p>Capture your mic and your system audio, so remote calls are transcribed in full — no bot joining your meeting.</p></div>
+    <div class="card"><span class="emoji">📄</span><h3>Export anywhere</h3>
+      <p>Markdown, PDF, Word, or JSON — one click, saved straight to Downloads.</p></div>
+  </section>
+
+  <h2 id="faq">FAQ</h2>
+  <details open>
+    <summary>Does Confab need an internet connection?</summary>
+    <p>Only twice, ever: to download the app, and to download the speech model on first use (~460 MB). After that, everything works fully offline. Your audio and transcripts never touch a server.</p>
+  </details>
+  <details>
+    <summary>What do I need for AI summaries and chat?</summary>
+    <p>Install <a href="https://ollama.com">Ollama</a> (free) and pull a model like <code>llama3.2</code>. Without it, Confab still records, transcribes, searches, and exports — summaries and chat simply switch off.</p>
+  </details>
+  <details>
+    <summary>How does it capture the other side of a call?</summary>
+    <p>Through <a href="https://existential.audio/blackhole/">BlackHole</a>, a free open-source virtual audio driver. Confab's settings walk you through the one-time setup. Mic-only capture works with nothing extra installed.</p>
+  </details>
+  <details>
+    <summary>Which Macs does it run on?</summary>
+    <p>macOS 13.3 or newer. Apple Silicon (M1 and later) is recommended — transcription runs about 4× faster than real time there.</p>
+  </details>
+  <details>
+    <summary>Where is my data stored?</summary>
+    <p>In <code>~/Library/Application Support/Confab</code> on your Mac: a SQLite database, WAV recordings, and a local search index. Delete it all anytime from Settings.</p>
+  </details>
+  <details>
+    <summary>Speaker labels?</summary>
+    <p>Coming in v1.1. The diarization engine already works in development; we kept it out of v1 to keep the app lean.</p>
+  </details>
+
+  <footer>
+    <p>Confab · Private, on-device AI meeting notes · <a href="https://github.com/hk2166/Transcriber">GitHub</a></p>
+  </footer>
+
+</div>
+</body>
+</html>
