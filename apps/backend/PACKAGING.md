@@ -90,10 +90,32 @@ the bundle. First-run model download is the onboarding step (Day 13).
   as a Tauri **resource**, spawning the inner binary via `Command` with the
   process-group kill above.
 
-## Still to do (by Day 16)
+## Day 16 results — sidecar wired, DMG built ✅
 
-- Tauri sidecar wiring: `externalBin`, Rust spawn + read the port handshake +
-  kill on quit (verify no orphan process in Activity Monitor).
-- Frontend reads the announced port instead of hardcoded 8765.
-- `npm run tauri build` → unsigned `.app` runs the Day-5 demo.
-- Then Day 16: sign + notarize + DMG; Phase-2 packaging for the torch features.
+- **onedir-as-resource won** over `externalBin`/onefile: the whole PyInstaller
+  folder is bundled via `bundle.resources` → `Contents/Resources/backend/`, and
+  Rust (`src-tauri/src/backend.rs`) spawns the inner binary directly. No
+  per-launch unpack cost.
+- **Handshake:** the sidecar prints `CONFAB_PORT=<n>` (renamed with the
+  product); Rust reads it off stdout, waits for the port to accept, then
+  creates the window with `window.__CONFAB_PORT__` injected via
+  `initialization_script` — so `config.ts` sees it at module load.
+- **Orphans solved:** the child is spawned with `process_group(0)` and the
+  whole group gets SIGTERM (→ SIGKILL after 3 s) on `RunEvent::Exit`. Verified:
+  quit leaves no `confab-backend` process.
+- **Downloads:** WKWebView ignores `<a download>` clicks by default; an
+  `on_download` handler routes exports to `~/Downloads` (collision-safe).
+- **Symlinks:** the bundler dereferences the 20 dylib symlinks in the dist
+  (231 MB → 270 MB in Resources). Acceptable.
+- **Sizes:** `Confab.app` 278 MB installed, **DMG 115 MB** compressed.
+- **Logs:** sidecar stdout+stderr → `~/Library/Logs/Confab/backend.log`
+  (truncated per launch).
+- **Signing/notarization:** `scripts/build-release.sh` deep-signs every Mach-O
+  in the backend dist (hardened runtime + `Entitlements.plist`), lets
+  tauri-bundler sign the app, then `notarytool submit --wait` + staple.
+  Blocked only on the Apple Developer membership. Mic usage string lives in
+  `src-tauri/Info.plist`; entitlements: `audio-input`,
+  `allow-unsigned-executable-memory`, `disable-library-validation`,
+  `allow-dyld-environment-variables`.
+- **Phase 2 / v1.1:** torch features (pyannote diarization) stay out of the
+  bundle; ship as an optional download or ONNX port.
