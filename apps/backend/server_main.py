@@ -30,7 +30,7 @@ def _free_port() -> int:
 def main() -> None:
     port = _free_port()
     # Handshake line the Tauri host greps for on the sidecar's stdout.
-    print(f"MEETINGMIND_PORT={port}", flush=True)
+    print(f"CONFAB_PORT={port}", flush=True)
     uvicorn.run(app, host="127.0.0.1", port=port, log_level="info")
 
 

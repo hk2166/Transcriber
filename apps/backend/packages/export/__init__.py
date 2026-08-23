@@ -1,4 +1,4 @@
-"""Meeting export for MeetingMind — Markdown, JSON, PDF, DOCX.
+"""Meeting export for Confab — Markdown, JSON, PDF, DOCX.
 
 Renderers consume a self-contained :class:`MeetingExport`; the backend builds
 that from storage, keeping this package independent of the database.

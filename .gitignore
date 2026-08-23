@@ -14,6 +14,10 @@ dist/
 target/
 build/
 *.spec
+# ...but the PyInstaller build definition is source, not an artifact
+!apps/backend/confab-backend.spec
+# Release output (DMGs, signed apps)
+release/
 
 # Environment variables
 .env
@@ -22,3 +26,5 @@ Task.md
 # Audio test artifacts (manual capture scripts write these)
 apps/backend/test_*.wav
 .claude
+# Dev launcher logs
+.dev-logs/

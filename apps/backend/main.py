@@ -1,4 +1,4 @@
-"""MeetingMind backend entry point.
+"""Confab backend entry point.
 
 Start with:
     uv run uvicorn main:app --host 127.0.0.1 --port 8765 --reload
@@ -53,7 +53,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(
-    title="MeetingMind",
+    title="Confab",
     description="Local AI meeting assistant — 100% offline.",
     version="0.1.0",
     lifespan=lifespan,

@@ -18,13 +18,21 @@ logger = logging.getLogger(__name__)
 __all__ = ["SessionRecorder", "default_recordings_dir"]
 
 #: Single source of truth for the app-data folder name.
-#: The product gets renamed on Day 16 — change it here only.
-APP_DIR_NAME = "MeetingMind"
+APP_DIR_NAME = "Confab"
+
+#: Pre-rename (Day 16) folder name; migrated on first launch.
+_LEGACY_DIR_NAME = "MeetingMind"
 
 
 def default_recordings_dir() -> Path:
     """Return the macOS recordings directory, creating it if needed."""
-    path = Path.home() / "Library" / "Application Support" / APP_DIR_NAME / "recordings"
+    app_support = Path.home() / "Library" / "Application Support"
+    app_dir = app_support / APP_DIR_NAME
+    legacy = app_support / _LEGACY_DIR_NAME
+    if legacy.is_dir() and not app_dir.exists():
+        legacy.rename(app_dir)
+        logger.info("Migrated app data: %s -> %s", legacy, app_dir)
+    path = app_dir / "recordings"
     path.mkdir(parents=True, exist_ok=True)
     return path
 

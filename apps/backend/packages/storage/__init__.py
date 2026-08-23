@@ -1,4 +1,4 @@
-"""Persistence for MeetingMind — plain sqlite3, no ORM.
+"""Persistence for Confab — plain sqlite3, no ORM.
 
 ``connect(path)`` opens a database and applies migrations; the ``repository``
 functions do typed CRUD over it.

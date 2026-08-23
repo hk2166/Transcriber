@@ -35,7 +35,7 @@ def verify_sentence_transformer() -> None:
 
     logger.info("Verifying Sentence Transformer...")
     model = SentenceTransformer("all-MiniLM-L6-v2")
-    dim = len(model.encode("MeetingMind"))
+    dim = len(model.encode("Confab"))
     logger.info("  OK  model=all-MiniLM-L6-v2  embedding_dim=%d", dim)
     del model
 

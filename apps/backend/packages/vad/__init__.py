@@ -1,4 +1,4 @@
-"""Voice-activity detection for MeetingMind.
+"""Voice-activity detection for Confab.
 
 Streaming Silero VAD (ONNX) plus a speech/silence segmenter that keeps
 silence out of the transcription pipeline.

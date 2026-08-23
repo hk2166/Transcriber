@@ -1,1 +1,1 @@
-"""FastAPI routers for the MeetingMind backend."""
+"""FastAPI routers for the Confab backend."""

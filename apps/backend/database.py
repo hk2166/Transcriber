@@ -20,7 +20,7 @@ _conn: sqlite3.Connection | None = None
 
 
 def db_path() -> Path:
-    """``~/Library/Application Support/MeetingMind/meetings.db`` (dir ensured)."""
+    """``~/Library/Application Support/Confab/meetings.db`` (dir ensured)."""
     return default_recordings_dir().parent / "meetings.db"
 
 

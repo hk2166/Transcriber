@@ -1,4 +1,4 @@
-"""Audio capture package for MeetingMind.
+"""Audio capture package for Confab.
 
 Provides base and specialised classes for streaming audio from microphone
 and system loopback (BlackHole) devices, a mixed mic + system capture, and

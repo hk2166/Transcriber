@@ -1,4 +1,4 @@
-"""Mixed microphone + system audio capture for MeetingMind."""
+"""Mixed microphone + system audio capture for Confab."""
 
 from __future__ import annotations
 

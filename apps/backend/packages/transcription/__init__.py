@@ -1,4 +1,4 @@
-"""Speech-to-text for MeetingMind (faster-whisper)."""
+"""Speech-to-text for Confab (faster-whisper)."""
 
 from packages.transcription.transcriber import TranscriptSegment, WhisperTranscriber
 

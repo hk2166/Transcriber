@@ -1,4 +1,4 @@
-"""Local-LLM intelligence for MeetingMind (Ollama): summaries, titles, chat."""
+"""Local-LLM intelligence for Confab (Ollama): summaries, titles, chat."""
 
 from packages.intelligence.client import OllamaClient, OllamaUnavailable
 from packages.intelligence.rag import MeetingRAG, RetrievedSegment

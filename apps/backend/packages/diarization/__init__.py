@@ -1,4 +1,4 @@
-"""Speaker diarization for MeetingMind (pyannote, post-meeting).
+"""Speaker diarization for Confab (pyannote, post-meeting).
 
 Importing this package is torch-free; only constructing a ``SpeakerDiarizer``
 loads torch/pyannote.

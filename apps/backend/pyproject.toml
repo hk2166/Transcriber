@@ -1,7 +1,7 @@
 [project]
-name = "meetingmind-backend"
+name = "confab-backend"
 version = "0.1.0"
-description = "MeetingMind backend — local AI meeting assistant."
+description = "Confab backend — local AI meeting assistant."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
