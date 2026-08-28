@@ -79,6 +79,23 @@ See [apps/backend/PACKAGING.md](apps/backend/PACKAGING.md) for the packaging des
 - **v1.1** — the optional **speaker pack**: diarized who-said-what labels as a post-install download (the pack mechanism ships in v1; the pack binary is built by `scripts/build-speaker-pack.sh` and attached to a release)
 - **Phase 2** — Windows (WASAPI loopback makes system audio easier there)
 
+## Contributing
+
+Issues and pull requests are welcome. See the **Development** section above to
+get a local build running; `uv run pytest -q --ignore=tests` (backend) and
+`npx tsc --noEmit` (frontend) should pass before a PR.
+
+## Acknowledgements
+
+Confab stands on excellent open-source work:
+
+- [faster-whisper](https://github.com/SYSTRAN/faster-whisper) / [CTranslate2](https://github.com/OpenNMT/CTranslate2) — speech recognition (MIT)
+- [Silero VAD](https://github.com/snakers4/silero-vad) — voice activity detection (MIT)
+- [pyannote.audio](https://github.com/pyannote/pyannote-audio) — diarization, v1.1 speaker pack (MIT; some model weights CC-BY-4.0)
+- [Ollama](https://ollama.com) — local LLM runtime
+- [sentence-transformers/all-MiniLM-L6-v2](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2) — embeddings (Apache-2.0)
+- [Tauri](https://tauri.app) — the desktop shell
+
 ## License
 
-TBD — all rights reserved until a license is chosen.
+[MIT](LICENSE) © 2026 Hemant
