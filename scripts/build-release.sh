@@ -52,8 +52,11 @@ BUNDLE_DIR="$DESKTOP/src-tauri/target/release/bundle"
 APP="$BUNDLE_DIR/macos/Confab.app"
 [ -d "$APP" ] || { echo "✗ Confab.app was not built — aborting." >&2; exit 1; }
 
-DMG="$(ls "$BUNDLE_DIR"/dmg/*.dmg 2>/dev/null | head -1)"
-if [ -z "${DMG:-}" ] || [ ! -f "$DMG" ]; then
+# Glob (not `ls | head`): a failing command substitution under `set -e` would
+# abort the script here — exactly in the no-DMG case we need to recover from.
+DMG=""
+for candidate in "$BUNDLE_DIR"/dmg/*.dmg; do [ -f "$candidate" ] && DMG="$candidate"; done
+if [ -z "$DMG" ]; then
   echo "   no DMG from bundle_dmg.sh — building one with hdiutil (no Finder needed)"
   hdiutil detach "/Volumes/Confab" -force >/dev/null 2>&1 || true
   STAGE="$(mktemp -d)/Confab"; mkdir -p "$STAGE"
