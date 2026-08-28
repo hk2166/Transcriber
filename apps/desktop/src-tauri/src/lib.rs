@@ -2,14 +2,57 @@ mod backend;
 
 use std::path::{Path, PathBuf};
 
-use tauri::{AppHandle, Manager, RunEvent, WebviewUrl};
+use tauri::image::Image;
+use tauri::menu::{Menu, MenuItem};
+use tauri::tray::TrayIconBuilder;
 use tauri::webview::{DownloadEvent, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Manager, RunEvent, WebviewUrl, WindowEvent, Wry};
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+
+/// System-wide record toggle (also shown in the tray menu).
+const HOTKEY: &str = "super+shift+r";
+
+/// Tray handles kept in state so `set_recording` can update the menu label.
+struct Tray {
+    toggle: MenuItem<Wry>,
+}
+
+#[tauri::command]
+fn set_recording(app: AppHandle, recording: bool) {
+    if let Some(tray) = app.try_state::<Tray>() {
+        let label = if recording { "Stop Recording" } else { "Start Recording" };
+        let _ = tray.toggle.set_text(label);
+    }
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, _shortcut, event| {
+                    if event.state() == ShortcutState::Pressed {
+                        let _ = app.emit("toggle-record", ());
+                    }
+                })
+                .build(),
+        )
+        .invoke_handler(tauri::generate_handler![set_recording])
+        .on_window_event(|window, event| {
+            // macOS convention: closing the window keeps the app (and any
+            // recording) alive in the tray; Cmd-Q / tray Quit really quits.
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                let _ = window.hide();
+                api.prevent_close();
+            }
+        })
         .setup(|app| {
+            setup_tray(app.handle())?;
+            if let Err(error) = app.global_shortcut().register(HOTKEY) {
+                // Another app may own the combo — the tray still works.
+                eprintln!("global shortcut unavailable: {error}");
+            }
             if cfg!(debug_assertions) {
                 // Dev: ./launch.sh runs the backend on the fixed dev port
                 // (config.ts falls back to 8765 when no port is injected).
@@ -22,13 +65,49 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
 
-    app.run(|app, event| {
-        if let RunEvent::Exit = event {
+    app.run(|app, event| match event {
+        RunEvent::Exit => {
             if let Some(backend) = app.try_state::<backend::Backend>() {
                 backend.shutdown();
             }
         }
+        #[cfg(target_os = "macos")]
+        RunEvent::Reopen { .. } => show_main_window(app),
+        _ => {}
     });
+}
+
+fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
+    let toggle = MenuItem::with_id(app, "toggle-record", "Start Recording", true, None::<&str>)?;
+    let show = MenuItem::with_id(app, "show", "Show Confab", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "Quit Confab", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&toggle, &show, &quit])?;
+
+    let icon = Image::from_bytes(include_bytes!("../icons/tray.png"))?;
+    TrayIconBuilder::with_id("main-tray")
+        .icon(icon)
+        .icon_as_template(true)
+        .tooltip("Confab")
+        .menu(&menu)
+        .on_menu_event(|app, event| match event.id.as_ref() {
+            "toggle-record" => {
+                let _ = app.emit("toggle-record", ());
+            }
+            "show" => show_main_window(app),
+            "quit" => app.exit(0),
+            _ => {}
+        })
+        .build(app)?;
+
+    app.manage(Tray { toggle });
+    Ok(())
+}
+
+fn show_main_window(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
 }
 
 /// Release path: bring the sidecar up off the main thread (cold start is
@@ -86,7 +165,7 @@ fn create_main_window(app: &AppHandle, port: Option<u16>) -> tauri::Result<()> {
             if let Some(dir) = &downloads_dir {
                 let suggested = destination
                     .file_name()
-                    .map(|name| PathBuf::from(name))
+                    .map(PathBuf::from)
                     .unwrap_or_else(|| PathBuf::from("export"));
                 *destination = unique_path(dir, &suggested);
             }
