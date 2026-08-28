@@ -10,10 +10,16 @@ No cloud. No bots joining your calls. No subscription. No audio uploaded anywher
 ## Features
 
 - **Live transcription** — speech appears on screen in under ~2 s (faster-whisper running locally)
-- **AI summaries** — one click after each meeting: summary, key points, action items, decisions, open questions (via [Ollama](https://ollama.com))
+- **Pause/resume** — freeze a recording without ending the meeting
+- **AI summaries** — after each meeting: summary, key points, action items, decisions, open questions (via [Ollama](https://ollama.com))
 - **Automatic meeting titles** — meetings name themselves from their content
+- **Playback with a synced transcript** — replay any meeting; the transcript follows the audio, click a line to jump there
+- **Transcript editing** — click any line to correct it; fixes flow into search and exports
+- **Action-item hub** — every meeting's action items in one checklist, checked-off state persisted
 - **Semantic search** — find "that thing we said about the deadline" across all meetings, by meaning, in milliseconds
 - **Chat with a meeting** — ask questions, get answers grounded in the transcript with citations
+- **Menu-bar quick record** — tray icon + global hotkey (⌘⇧R); closing the window keeps recording
+- **Call detection** — a live Zoom/Webex call offers one-click (or automatic) recording
 - **Export** — Markdown, PDF, Word, JSON
 - **System audio + mic** — capture both sides of a call (system audio via BlackHole)
 - **100% local** — every model runs on your Mac; the app makes zero network calls with your content
@@ -70,7 +76,7 @@ See [apps/backend/PACKAGING.md](apps/backend/PACKAGING.md) for the packaging des
 
 ## Roadmap
 
-- **v1.1** — speaker diarization in the packaged app (works in dev today; kept out of v1 to stay torch-free and lean), first-run model-download progress UI
+- **v1.1** — the optional **speaker pack**: diarized who-said-what labels as a post-install download (the pack mechanism ships in v1; the pack binary is built by `scripts/build-speaker-pack.sh` and attached to a release)
 - **Phase 2** — Windows (WASAPI loopback makes system audio easier there)
 
 ## License

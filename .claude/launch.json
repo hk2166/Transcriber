@@ -2,9 +2,17 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "desktop",
+      "name": "backend",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": ["run", "uvicorn", "main:app", "--host", "127.0.0.1", "--port", "8765"],
+      "cwd": "apps/backend",
+      "port": 8765
+    },
+    {
+      "name": "frontend",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "apps/desktop", "run", "dev"],
+      "runtimeArgs": ["run", "dev"],
+      "cwd": "apps/desktop",
       "port": 1420
     }
   ]
