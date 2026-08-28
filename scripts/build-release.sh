@@ -43,11 +43,26 @@ echo "==> 3/4 Tauri build (app + DMG)"
 # bundle_dmg.sh aborts if a prior/interrupted run left the DMG volume mounted.
 hdiutil detach "/Volumes/Confab" -force >/dev/null 2>&1 || true
 # tauri-bundler reads APPLE_SIGNING_IDENTITY from the environment on its own.
-( cd "$DESKTOP" && npm run tauri build )
+# Its DMG step (bundle_dmg.sh) drives Finder via AppleScript and can fail when
+# the build runs detached/headless — the .app still builds fine, and we fall
+# back to a plain hdiutil DMG below.
+( cd "$DESKTOP" && npm run tauri build ) || echo "   (bundler returned non-zero — checking outputs)"
 
 BUNDLE_DIR="$DESKTOP/src-tauri/target/release/bundle"
-DMG="$(ls "$BUNDLE_DIR"/dmg/*.dmg | head -1)"
 APP="$BUNDLE_DIR/macos/Confab.app"
+[ -d "$APP" ] || { echo "✗ Confab.app was not built — aborting." >&2; exit 1; }
+
+DMG="$(ls "$BUNDLE_DIR"/dmg/*.dmg 2>/dev/null | head -1)"
+if [ -z "${DMG:-}" ] || [ ! -f "$DMG" ]; then
+  echo "   no DMG from bundle_dmg.sh — building one with hdiutil (no Finder needed)"
+  hdiutil detach "/Volumes/Confab" -force >/dev/null 2>&1 || true
+  STAGE="$(mktemp -d)/Confab"; mkdir -p "$STAGE"
+  ditto "$APP" "$STAGE/Confab.app"   # ditto preserves the sidecar's dylib symlinks
+  ln -s /Applications "$STAGE/Applications"
+  DMG="$BUNDLE_DIR/dmg/Confab_0.1.0_aarch64.dmg"
+  mkdir -p "$(dirname "$DMG")"; rm -f "$DMG"
+  hdiutil create -volname "Confab" -srcfolder "$STAGE" -ov -format UDZO "$DMG" >/dev/null
+fi
 
 if [ -n "${NOTARY_PROFILE:-}" ]; then
   echo "==> 4/4 Notarizing $(basename "$DMG")"
