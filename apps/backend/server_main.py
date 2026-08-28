@@ -7,11 +7,19 @@ the FastAPI app.
 
 from __future__ import annotations
 
-import socket
+import os
 
-import uvicorn
+# The Xet native accelerator (hf_xet) is not bundled — it's an optional
+# huggingface_hub download optimisation with an automatic HTTP fallback.
+# Disable it before anything imports huggingface_hub so it never probes for
+# the missing lib.
+os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
 
-from main import app
+import socket  # noqa: E402
+
+import uvicorn  # noqa: E402
+
+from main import app  # noqa: E402
 
 
 def _free_port() -> int:

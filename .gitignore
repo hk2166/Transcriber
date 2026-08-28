@@ -14,10 +14,14 @@ dist/
 target/
 build/
 *.spec
-# ...but the PyInstaller build definition is source, not an artifact
+# ...but the PyInstaller build definitions are source, not artifacts
 !apps/backend/confab-backend.spec
+!apps/backend/confab-speakers.spec
 # Release output (DMGs, signed apps)
 release/
+
+# macOS
+.DS_Store
 
 # Environment variables
 .env

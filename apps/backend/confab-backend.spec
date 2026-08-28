@@ -27,7 +27,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=['torch', 'transformers', 'pyannote', 'sentence_transformers', 'scipy', 'matplotlib', 'tkinter', 'PIL'],
+    excludes=['torch', 'transformers', 'pyannote', 'sentence_transformers', 'scipy', 'matplotlib', 'tkinter', 'PIL', 'hf_xet'],
     noarchive=False,
     optimize=0,
 )

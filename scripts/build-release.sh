@@ -40,6 +40,8 @@ else
 fi
 
 echo "==> 3/4 Tauri build (app + DMG)"
+# bundle_dmg.sh aborts if a prior/interrupted run left the DMG volume mounted.
+hdiutil detach "/Volumes/Confab" -force >/dev/null 2>&1 || true
 # tauri-bundler reads APPLE_SIGNING_IDENTITY from the environment on its own.
 ( cd "$DESKTOP" && npm run tauri build )
 
