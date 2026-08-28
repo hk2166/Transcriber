@@ -9,6 +9,12 @@ interface LiveTranscriptProps {
   speakers?: Speaker[];
   onRenameSpeaker?: (speakerId: number, name: string) => void;
   header?: ReactNode;
+  /** Playback position (ms) — highlights + follows the matching segment. */
+  activeMs?: number | null;
+  /** Click a timestamp to jump playback there. */
+  onSeek?: (ms: number) => void;
+  /** Click a line's text to correct it (past meetings only). */
+  onEditSegment?: (segmentId: number, text: string) => void;
 }
 
 function formatTimestamp(ms: number): string {
@@ -70,6 +76,64 @@ function SpeakerChip({
   );
 }
 
+function SegmentText({
+  segment,
+  onEdit,
+}: {
+  segment: TranscriptSegment;
+  onEdit?: (segmentId: number, text: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(segment.text);
+
+  const editable = onEdit !== undefined && segment.id !== undefined;
+
+  const save = () => {
+    setEditing(false);
+    const next = value.trim();
+    if (next && next !== segment.text && segment.id !== undefined) {
+      onEdit?.(segment.id, next);
+    }
+  };
+
+  if (editing) {
+    return (
+      <textarea
+        className="segment__editor"
+        value={value}
+        autoFocus
+        rows={Math.max(1, Math.ceil(value.length / 80))}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={save}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            save();
+          }
+          if (e.key === "Escape") {
+            setValue(segment.text);
+            setEditing(false);
+          }
+        }}
+      />
+    );
+  }
+
+  return (
+    <span
+      className={"segment__text" + (editable ? " segment__text--editable" : "")}
+      title={editable ? "Click to correct" : undefined}
+      onClick={() => {
+        if (!editable) return;
+        setValue(segment.text);
+        setEditing(true);
+      }}
+    >
+      {segment.text}
+    </span>
+  );
+}
+
 export function LiveTranscript({
   segments,
   recording,
@@ -77,16 +141,38 @@ export function LiveTranscript({
   speakers,
   onRenameSpeaker,
   header,
+  activeMs,
+  onSeek,
+  onEditSegment,
 }: LiveTranscriptProps) {
   const endRef = useRef<HTMLDivElement | null>(null);
+  const activeRef = useRef<HTMLLIElement | null>(null);
   const speakerById = useMemo(
     () => new Map((speakers ?? []).map((s) => [s.id, s])),
     [speakers],
   );
 
+  // The segment playback is currently inside (last one whose start has passed).
+  const activeIndex = useMemo(() => {
+    if (activeMs == null) return -1;
+    let index = -1;
+    for (let i = 0; i < segments.length; i++) {
+      if (segments[i].start_ms <= activeMs) index = i;
+      else break;
+    }
+    return index;
+  }, [activeMs, segments]);
+
+  // Live view: follow the newest line. Playback: follow the active line.
   useEffect(() => {
+    if (!recording) return;
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [segments.length, speechActive, recording]);
+
+  useEffect(() => {
+    if (recording || activeIndex < 0) return;
+    activeRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [activeIndex, recording]);
 
   if (!recording && segments.length === 0) {
     return (
@@ -119,11 +205,26 @@ export function LiveTranscript({
             segment.speaker_id != null
               ? speakerById.get(segment.speaker_id)
               : undefined;
+          const active = index === activeIndex;
           return (
-            <li className="segment" key={`${segment.start_ms}-${index}`}>
-              <span className="segment__time">
-                {formatTimestamp(segment.start_ms)}
-              </span>
+            <li
+              className={"segment" + (active ? " segment--active" : "")}
+              key={segment.id ?? `${segment.start_ms}-${index}`}
+              ref={active ? activeRef : undefined}
+            >
+              {onSeek ? (
+                <button
+                  className="segment__time segment__time--seek"
+                  title="Jump playback here"
+                  onClick={() => onSeek(segment.start_ms)}
+                >
+                  {formatTimestamp(segment.start_ms)}
+                </button>
+              ) : (
+                <span className="segment__time">
+                  {formatTimestamp(segment.start_ms)}
+                </span>
+              )}
               <span className="segment__body">
                 {speaker && (
                   <span
@@ -133,7 +234,7 @@ export function LiveTranscript({
                     {speakerName(speaker)}
                   </span>
                 )}
-                <span className="segment__text">{segment.text}</span>
+                <SegmentText segment={segment} onEdit={onEditSegment} />
               </span>
             </li>
           );

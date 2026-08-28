@@ -9,9 +9,15 @@ import {
   type Settings,
   type SystemStatus,
 } from "./api";
+import { IconClose } from "./Icons";
 
 const WHISPER_MODELS = ["base", "small", "medium"];
 const SOURCES: AudioSource[] = ["mic", "system", "both"];
+const AUTO_RECORD_LABELS: Record<Settings["auto_record"], string> = {
+  off: "Off",
+  prompt: "Ask me",
+  auto: "Start automatically",
+};
 
 export function SettingsPanel({
   onClose,
@@ -28,6 +34,15 @@ export function SettingsPanel({
     getSettings().then(setSettings).catch(() => setSettings(null));
     getSystemStatus().then(setStatus).catch(() => setStatus(null));
   }, []);
+
+  // Dismiss on Escape, like a native macOS sheet.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
 
   if (!settings) {
     return (
@@ -70,7 +85,7 @@ export function SettingsPanel({
         <header className="modal__header">
           <h2>Settings</h2>
           <button className="modal__close" onClick={onClose} aria-label="Close">
-            ✕
+            <IconClose size={16} />
           </button>
         </header>
 
@@ -141,6 +156,24 @@ export function SettingsPanel({
             onChange={(e) => patch({ auto_summarize: e.target.checked })}
           />
           <span>Summarise meetings automatically</span>
+        </label>
+
+        <label className="settings__field">
+          <span>When a Zoom/Webex call starts</span>
+          <select
+            value={settings.auto_record}
+            onChange={(e) =>
+              patch({ auto_record: e.target.value as Settings["auto_record"] })
+            }
+          >
+            {(Object.keys(AUTO_RECORD_LABELS) as Settings["auto_record"][]).map(
+              (mode) => (
+                <option key={mode} value={mode}>
+                  {AUTO_RECORD_LABELS[mode]}
+                </option>
+              ),
+            )}
+          </select>
         </label>
 
         <footer className="settings__footer">

@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   ApiError,
+  pauseSession,
+  resumeSession,
   startSession,
   stopSession,
   type AudioSource,
@@ -10,7 +12,12 @@ import {
 } from "./api";
 import { WS_BASE } from "./config";
 
-export type RecorderStatus = "idle" | "starting" | "recording" | "stopping";
+export type RecorderStatus =
+  | "idle"
+  | "starting"
+  | "recording"
+  | "paused"
+  | "stopping";
 
 interface RecorderState {
   status: RecorderStatus;
@@ -41,7 +48,8 @@ export function useRecorder() {
   const audioWsRef = useRef<WebSocket | null>(null);
   const transcriptWsRef = useRef<WebSocket | null>(null);
   const levelRef = useRef(0);
-  const startedAtRef = useRef(0);
+  const startedAtRef = useRef(0); // start of the current recording stretch
+  const accumulatedMsRef = useRef(0); // recorded time before the current stretch
 
   const closeSocket = useCallback((ref: { current: WebSocket | null }) => {
     const ws = ref.current;
@@ -75,6 +83,7 @@ export function useRecorder() {
 
       levelRef.current = 0;
       startedAtRef.current = Date.now();
+      accumulatedMsRef.current = 0;
 
       // Audio stream — drives the volume meter and the speech dot.
       const audioWs = new WebSocket(`${WS_BASE}/audio/stream/${session.session_id}`);
@@ -154,6 +163,36 @@ export function useRecorder() {
     [closeSocket],
   );
 
+  const pause = useCallback(async () => {
+    try {
+      await pauseSession();
+    } catch (err) {
+      const message = err instanceof ApiError ? err.message : "Couldn't pause.";
+      setState((s) => ({ ...s, error: message }));
+      return;
+    }
+    accumulatedMsRef.current += Date.now() - startedAtRef.current;
+    setState((s) => ({
+      ...s,
+      status: "paused",
+      level: 0,
+      speechActive: false,
+      elapsedMs: accumulatedMsRef.current,
+    }));
+  }, []);
+
+  const resume = useCallback(async () => {
+    try {
+      await resumeSession();
+    } catch (err) {
+      const message = err instanceof ApiError ? err.message : "Couldn't resume.";
+      setState((s) => ({ ...s, error: message }));
+      return;
+    }
+    startedAtRef.current = Date.now();
+    setState((s) => ({ ...s, status: "recording" }));
+  }, []);
+
   const stop = useCallback(async () => {
     setState((s) => ({ ...s, status: "stopping" }));
     try {
@@ -165,11 +204,14 @@ export function useRecorder() {
     setState((s) => ({ ...s, status: "idle", level: 0, speechActive: false }));
   }, [closeSockets]);
 
-  // Elapsed timer — runs only while recording.
+  // Elapsed timer — runs only while recording (paused time doesn't count).
   useEffect(() => {
     if (state.status !== "recording") return;
     const id = setInterval(() => {
-      setState((s) => ({ ...s, elapsedMs: Date.now() - startedAtRef.current }));
+      setState((s) => ({
+        ...s,
+        elapsedMs: accumulatedMsRef.current + (Date.now() - startedAtRef.current),
+      }));
     }, 500);
     return () => clearInterval(id);
   }, [state.status]);
@@ -177,5 +219,5 @@ export function useRecorder() {
   // Kill any live sockets if the component unmounts.
   useEffect(() => closeSockets, [closeSockets]);
 
-  return { ...state, start, stop };
+  return { ...state, start, stop, pause, resume };
 }

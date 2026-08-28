@@ -17,6 +17,7 @@ export interface StopResponse {
 }
 
 export interface TranscriptSegment {
+  id?: number; // present on stored segments (needed for editing)
   text: string;
   start_ms: number;
   end_ms: number;
@@ -88,6 +89,14 @@ export function stopSession(): Promise<StopResponse> {
   return postJson<StopResponse>("/audio/stop");
 }
 
+export function pauseSession(): Promise<{ paused: boolean }> {
+  return postJson<{ paused: boolean }>("/audio/pause");
+}
+
+export function resumeSession(): Promise<{ paused: boolean }> {
+  return postJson<{ paused: boolean }>("/audio/resume");
+}
+
 async function getJson<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`);
   if (!res.ok) {
@@ -111,6 +120,7 @@ export interface Settings {
   vad_threshold: number;
   default_source: AudioSource;
   auto_summarize: boolean;
+  auto_record: "off" | "prompt" | "auto";
 }
 
 export interface SystemStatus {
@@ -248,4 +258,102 @@ export function renameSpeaker(
   name: string,
 ): Promise<{ renamed: boolean }> {
   return postJson<{ renamed: boolean }>("/speakers/rename", { speaker_id, name });
+}
+
+async function patchJson<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    let detail = res.statusText;
+    try {
+      const data = await res.json();
+      if (typeof data?.detail === "string") detail = data.detail;
+    } catch {
+      // Non-JSON error body — fall back to the status text.
+    }
+    throw new ApiError(res.status, detail);
+  }
+  return (await res.json()) as T;
+}
+
+/** URL for the meeting's WAV — point an <audio> element straight at it. */
+export function meetingAudioUrl(meetingId: number): string {
+  return `${API_BASE}/meetings/${meetingId}/audio`;
+}
+
+export function updateSegmentText(
+  meetingId: number,
+  segmentId: number,
+  text: string,
+): Promise<{ updated: boolean }> {
+  return patchJson<{ updated: boolean }>(
+    `/meetings/${meetingId}/segments/${segmentId}`,
+    { text },
+  );
+}
+
+export interface ActionItem {
+  id: number;
+  meeting_id: number;
+  meeting_title: string;
+  meeting_started_at: string;
+  text: string;
+  done: boolean;
+}
+
+export function getActionItems(): Promise<ActionItem[]> {
+  return getJson<ActionItem[]>("/action-items");
+}
+
+export function setActionItemDone(
+  itemId: number,
+  done: boolean,
+): Promise<{ updated: boolean }> {
+  return patchJson<{ updated: boolean }>(`/action-items/${itemId}`, { done });
+}
+
+export interface ModelStatus {
+  state: "unknown" | "absent" | "downloading" | "ready" | "error";
+  model: string | null;
+  progress: number;
+  done_bytes: number;
+  total_bytes: number;
+  error: string | null;
+}
+
+export function getModelStatus(): Promise<ModelStatus> {
+  return getJson<ModelStatus>("/system/model-status");
+}
+
+export function startModelDownload(): Promise<ModelStatus> {
+  return postJson<ModelStatus>("/system/model-download");
+}
+
+export interface MeetingApp {
+  app: string | null;
+  since: number | null;
+  recording: boolean;
+  mode: "off" | "prompt" | "auto";
+}
+
+export function getMeetingApp(): Promise<MeetingApp> {
+  return getJson<MeetingApp>("/system/meeting-app");
+}
+
+export interface SpeakerPackStatus {
+  state: "idle" | "downloading" | "error";
+  progress: number;
+  error: string | null;
+  installed: boolean;
+}
+
+export function getSpeakerPackStatus(): Promise<SpeakerPackStatus> {
+  return getJson<SpeakerPackStatus>("/system/speaker-pack");
+}
+
+export function installSpeakerPack(): Promise<SpeakerPackStatus> {
+  return postJson<SpeakerPackStatus>("/system/speaker-pack-install");
 }

@@ -47,7 +47,10 @@ export function MeetingChat({ meetingId }: { meetingId: number }) {
         onError: (message) => updateLast((m) => ({ ...m, text: message })),
       });
     } catch {
-      updateLast((m) => ({ ...m, text: "Couldn't reach the assistant." }));
+      updateLast((m) => ({
+        ...m,
+        text: "The assistant didn't respond. Please try again.",
+      }));
     } finally {
       setBusy(false);
     }

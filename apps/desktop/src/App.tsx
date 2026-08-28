@@ -1,12 +1,14 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   getMeetingSegments,
   getMeetings,
   getMeetingSpeakers,
   getMeetingSummary,
+  meetingAudioUrl,
   renameSpeaker,
   searchSegments,
+  updateSegmentText,
   type AudioSource,
   type Meeting,
   type MeetingSummary,
@@ -14,10 +16,20 @@ import {
   type Speaker,
   type TranscriptSegment,
 } from "./api";
+import { ActionItems } from "./ActionItems";
 import { APP_NAME } from "./config";
+import { DetectBanner } from "./DetectBanner";
+import {
+  IconPlus,
+  IconSearch,
+  IconSettings,
+  IconTasks,
+  IconWaveform,
+} from "./Icons";
 import { ExportMenu } from "./ExportMenu";
 import { LiveTranscript } from "./LiveTranscript";
 import { MeetingChat } from "./MeetingChat";
+import { ModelBanner } from "./ModelBanner";
 import { RecordButton } from "./RecordButton";
 import { SettingsPanel } from "./SettingsPanel";
 import { SourceSelector } from "./SourceSelector";
@@ -50,6 +62,8 @@ function subtitleFor(status: RecorderStatus): string {
   switch (status) {
     case "recording":
       return "Recording…";
+    case "paused":
+      return "Paused";
     case "starting":
       return "Starting…";
     case "stopping":
@@ -59,10 +73,22 @@ function subtitleFor(status: RecorderStatus): string {
   }
 }
 
+const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+
 function App() {
   const [source, setSource] = useState<AudioSource>("both");
-  const { status, level, speechActive, transcripts, elapsedMs, error, start, stop } =
-    useRecorder();
+  const {
+    status,
+    level,
+    speechActive,
+    transcripts,
+    elapsedMs,
+    error,
+    start,
+    stop,
+    pause,
+    resume,
+  } = useRecorder();
 
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [connected, setConnected] = useState(true);
@@ -74,8 +100,16 @@ function App() {
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [meetingTab, setMeetingTab] = useState<"transcript" | "chat">("transcript");
   const [showSettings, setShowSettings] = useState(false);
+  const [showActions, setShowActions] = useState(false);
+
+  // Playback state for the past-meeting view.
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [playbackMs, setPlaybackMs] = useState<number | null>(null);
+  const [playbackOk, setPlaybackOk] = useState(true);
 
   const recording = status === "recording";
+  const paused = status === "paused";
+  const sessionLive = recording || paused;
   const busy = status === "starting" || status === "stopping";
   const idle = status === "idle";
 
@@ -112,7 +146,10 @@ function App() {
 
   const selectMeeting = async (id: number) => {
     setSelectedId(id);
+    setShowActions(false);
     setMeetingTab("transcript");
+    setPlaybackMs(null);
+    setPlaybackOk(true);
     try {
       const [segments, speakers, summary] = await Promise.all([
         getMeetingSegments(id),
@@ -139,8 +176,32 @@ function App() {
     }
   };
 
+  const handleEditSegment = async (segmentId: number, text: string) => {
+    if (selectedId === null) return;
+    const previous = pastSegments;
+    setPastSegments((segments) =>
+      segments.map((s) => (s.id === segmentId ? { ...s, text } : s)),
+    );
+    try {
+      await updateSegmentText(selectedId, segmentId, text);
+    } catch {
+      setPastSegments(previous);
+      toast("Couldn't save that edit.");
+    }
+  };
+
+  const handleSeek = (ms: number) => {
+    const element = audioRef.current;
+    if (!element) return;
+    element.currentTime = ms / 1000;
+    element.play().catch(() => {
+      // Autoplay refusal — the user can press play themselves.
+    });
+  };
+
   const newRecording = () => {
     setSelectedId(null);
+    setShowActions(false);
     setPastSegments([]);
     setPastSpeakers([]);
     setPastSummary(null);
@@ -152,12 +213,48 @@ function App() {
   };
 
   const handleToggle = () => {
-    if (recording) {
+    if (sessionLive) {
       stop();
-    } else {
+    } else if (idle) {
       start(source);
     }
   };
+
+  const startFromDetect = useCallback(() => {
+    newRecording();
+    start(source);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [start, source]);
+
+  // --- Tauri shell glue (tray + global hotkey) — no-ops in the dev browser.
+  const toggleRef = useRef(handleToggle);
+  useEffect(() => {
+    toggleRef.current = handleToggle;
+  });
+
+  useEffect(() => {
+    if (!isTauri) return;
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    import("@tauri-apps/api/event")
+      .then(({ listen }) => listen("toggle-record", () => toggleRef.current()))
+      .then((fn) => {
+        if (disposed) fn();
+        else unlisten = fn;
+      })
+      .catch(() => {});
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isTauri) return;
+    import("@tauri-apps/api/core")
+      .then(({ invoke }) => invoke("set_recording", { recording: sessionLive }))
+      .catch(() => {});
+  }, [sessionLive]);
 
   const selectedMeeting = meetings.find((m) => m.id === selectedId) ?? null;
   const viewingPast = selectedMeeting !== null;
@@ -166,21 +263,37 @@ function App() {
     <div className="app">
       <aside className="sidebar">
         <div className="sidebar__header">
-          <span className="app-mark" aria-hidden />
+          <span className="app-mark" aria-hidden>
+            <IconWaveform size={15} />
+          </span>
           <h1 className="app-name">{APP_NAME}</h1>
         </div>
 
         <button className="new-meeting" onClick={newRecording} disabled={!idle}>
-          <span aria-hidden>＋</span> New meeting
+          <IconPlus size={15} /> New meeting
         </button>
 
-        <input
-          className="search-input"
-          type="search"
-          placeholder="Search all meetings…"
-          value={searchQuery}
-          onChange={(event) => setSearchQuery(event.target.value)}
-        />
+        <button
+          className={"nav-actions" + (showActions ? " nav-actions--active" : "")}
+          onClick={() => {
+            setSelectedId(null);
+            setShowActions(true);
+          }}
+          disabled={!idle}
+        >
+          <IconTasks size={15} /> Action items
+        </button>
+
+        <div className="search-field">
+          <IconSearch size={15} className="search-field__icon" />
+          <input
+            className="search-input"
+            type="search"
+            placeholder="Search all meetings…"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+          />
+        </div>
 
         <nav className="meeting-list">
           {meetings.length === 0 ? (
@@ -215,7 +328,7 @@ function App() {
             onClick={() => setShowSettings(true)}
             aria-label="Settings"
           >
-            ⚙
+            <IconSettings size={16} />
           </button>
         </div>
       </aside>
@@ -265,6 +378,16 @@ function App() {
               </div>
             </div>
           </>
+        ) : showActions ? (
+          <>
+            <header className="topbar">
+              <div className="topbar__title">
+                <h2>Action items</h2>
+                <p className="topbar__sub">Collected from every meeting summary</p>
+              </div>
+            </header>
+            <ActionItems onOpenMeeting={selectMeeting} />
+          </>
         ) : viewingPast ? (
           <>
             <header className="topbar">
@@ -297,6 +420,23 @@ function App() {
                 />
               </div>
             </header>
+            {meetingTab === "transcript" &&
+              playbackOk &&
+              selectedMeeting.status !== "recording" && (
+                <div className="playback">
+                  <audio
+                    key={selectedMeeting.id}
+                    ref={audioRef}
+                    src={meetingAudioUrl(selectedMeeting.id)}
+                    controls
+                    preload="metadata"
+                    onTimeUpdate={(event) =>
+                      setPlaybackMs(event.currentTarget.currentTime * 1000)
+                    }
+                    onError={() => setPlaybackOk(false)}
+                  />
+                </div>
+              )}
             {meetingTab === "chat" ? (
               <MeetingChat meetingId={selectedMeeting.id} />
             ) : (
@@ -306,6 +446,9 @@ function App() {
                 speechActive={false}
                 speakers={pastSpeakers}
                 onRenameSpeaker={handleRenameSpeaker}
+                activeMs={playbackMs}
+                onSeek={playbackOk ? handleSeek : undefined}
+                onEditSegment={handleEditSegment}
                 header={
                   <SummaryPanel
                     summary={pastSummary}
@@ -323,9 +466,10 @@ function App() {
                 <p className="topbar__sub">{subtitleFor(status)}</p>
               </div>
               <div className="topbar__right">
-                {recording && (
+                {sessionLive && (
                   <span className="topbar__source">{SOURCE_LABEL[source]}</span>
                 )}
+                {paused && <span className="paused-badge">Paused</span>}
                 {recording && (
                   <div
                     className={
@@ -338,14 +482,17 @@ function App() {
                   </div>
                 )}
                 <div className="elapsed">
-                  {formatElapsed(recording ? elapsedMs : 0)}
+                  {formatElapsed(sessionLive ? elapsedMs : 0)}
                 </div>
               </div>
             </header>
 
+            <ModelBanner />
+            <DetectBanner active={idle} onRecord={startFromDetect} />
+
             <LiveTranscript
               segments={transcripts}
-              recording={recording}
+              recording={sessionLive}
               speechActive={speechActive}
             />
 
@@ -355,10 +502,20 @@ function App() {
               )}
 
               <RecordButton
-                recording={recording}
+                recording={sessionLive}
                 busy={busy}
                 onClick={handleToggle}
               />
+
+              {sessionLive && (
+                <button
+                  className="pause-button"
+                  onClick={paused ? resume : pause}
+                  title={paused ? "Resume recording" : "Pause recording"}
+                >
+                  {paused ? "Resume" : "Pause"}
+                </button>
+              )}
 
               <VolumeMeter level={recording ? level : 0} />
 
@@ -366,7 +523,11 @@ function App() {
                 <p className="stage__error">{error}</p>
               ) : (
                 <p className="stage__hint">
-                  {recording ? "Listening…" : SOURCE_HINT[source]}
+                  {recording
+                    ? "Listening…"
+                    : paused
+                      ? "Paused — nothing is being recorded."
+                      : SOURCE_HINT[source]}
                 </p>
               )}
             </footer>

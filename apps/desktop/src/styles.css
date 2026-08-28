@@ -6,49 +6,61 @@ button { cursor: pointer; font-family: inherit; color: inherit; }
 
 /* ===== Design tokens — dark is the default (Task.md) ===== */
 :root {
-  --bg-base: #1c1c1e;
-  --bg-elevated: #2c2c2e;
-  --bg-sidebar: rgba(30, 30, 32, 0.72);
-  --bg-hover: rgba(255, 255, 255, 0.06);
-  --text-primary: #f5f5f7;
-  --text-secondary: rgba(235, 235, 245, 0.6);
-  --text-tertiary: rgba(235, 235, 245, 0.3);
-  --border: rgba(255, 255, 255, 0.1);
-  --accent: #0a84ff;
+  --bg-base: #0a0a0a;
+  --bg-elevated: #151515;
+  --bg-sidebar: rgba(13, 13, 13, 0.72);
+  --bg-hover: rgba(255, 255, 255, 0.05);
+  --text-primary: #fafafa;
+  --text-secondary: rgba(255, 255, 255, 0.56);
+  --text-tertiary: rgba(255, 255, 255, 0.32);
+  --border: rgba(255, 255, 255, 0.10);
+  --border-strong: rgba(255, 255, 255, 0.22);
+  --accent: #ededed;        /* near-white primary — Canvas UI is monochrome */
+  --on-accent: #0a0a0a;     /* text/glyphs on a filled primary surface */
   --record: #ff453a;
   --record-glow: rgba(255, 69, 58, 0.35);
   --ok: #30d158;
   --radius: 10px;
+  --radius-lg: 14px;
   --sidebar-width: 260px;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
   color-scheme: dark;
 }
 
 @media (prefers-color-scheme: light) {
   :root {
-    --bg-base: #f5f5f7;
+    --bg-base: #f7f7f8;
     --bg-elevated: #ffffff;
-    --bg-sidebar: rgba(246, 246, 248, 0.72);
+    --bg-sidebar: rgba(250, 250, 251, 0.80);
     --bg-hover: rgba(0, 0, 0, 0.04);
-    --text-primary: #1d1d1f;
-    --text-secondary: rgba(60, 60, 67, 0.6);
-    --text-tertiary: rgba(60, 60, 67, 0.3);
-    --border: rgba(0, 0, 0, 0.1);
-    --accent: #007aff;
+    --text-primary: #0a0a0a;
+    --text-secondary: rgba(0, 0, 0, 0.56);
+    --text-tertiary: rgba(0, 0, 0, 0.36);
+    --border: rgba(0, 0, 0, 0.10);
+    --border-strong: rgba(0, 0, 0, 0.18);
+    --accent: #0a0a0a;      /* near-black primary */
+    --on-accent: #fafafa;
     --record: #ff3b30;
     --record-glow: rgba(255, 59, 48, 0.3);
-    --ok: #34c759;
+    --ok: #30a46c;
     color-scheme: light;
   }
 }
 
 body {
-  font-family: -apple-system, system-ui, "SF Pro Text", sans-serif;
+  font-family: ui-sans-serif, -apple-system, system-ui, "SF Pro Text", "Inter",
+    "Segoe UI", sans-serif;
   font-optical-sizing: auto;
   line-height: 1.5;
+  letter-spacing: -0.006em;
   color: var(--text-primary);
   background: var(--bg-base);
   -webkit-font-smoothing: antialiased;
 }
+
+/* Icons inherit text color and never shrink in flex rows. */
+button svg,
+.app-mark svg { flex-shrink: 0; }
 
 /* ===== Layout ===== */
 .app { display: flex; height: 100%; overflow: hidden; }
@@ -68,8 +80,11 @@ body {
 
 .sidebar__header { display: flex; align-items: center; gap: 10px; padding: 4px; }
 .app-mark {
-  width: 22px; height: 22px; border-radius: 7px;
-  background: linear-gradient(135deg, var(--accent), #5e5ce6);
+  width: 26px; height: 26px; border-radius: 8px;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
 }
 .app-name { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
 
@@ -589,4 +604,204 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .transcript__pulse { animation: none; }
+}
+/* ===== Feature round (Aug 2026): pause · playback · edits · actions · banners ===== */
+
+/* Sidebar: action-items nav button (sits under New meeting). */
+.nav-actions {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 8px; width: 100%;
+  font-size: 13px; font-weight: 500;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  transition: background 150ms ease, color 150ms ease;
+}
+.nav-actions:hover { background: var(--bg-hover); color: var(--text-primary); }
+.nav-actions--active { background: var(--bg-hover); color: var(--text-primary); }
+.nav-actions:disabled { opacity: 0.5; cursor: default; }
+
+/* Pause / resume next to the record button. */
+.pause-button {
+  padding: 8px 16px;
+  font-size: 13px; font-weight: 500;
+  color: var(--text-primary);
+  background: var(--bg-hover);
+  border: 1px solid var(--border); border-radius: 999px;
+  transition: background 150ms ease, transform 100ms ease-out;
+}
+.pause-button:hover { background: var(--border); }
+.pause-button:active { transform: scale(0.97); }
+
+.paused-badge {
+  padding: 3px 10px;
+  font-size: 12px; font-weight: 600;
+  color: var(--bg-base);
+  background: #ff9f0a;
+  border-radius: 999px;
+}
+
+/* Playback bar in the past-meeting view. */
+.playback {
+  padding: 10px 24px 0;
+}
+.playback audio {
+  width: 100%;
+  height: 36px;
+  border-radius: var(--radius);
+}
+
+/* Playback-synced highlight + seekable timestamps. */
+.segment--active {
+  background: var(--bg-hover);
+  border-radius: 8px;
+}
+.segment__time--seek {
+  background: none; border: none; padding: 0;
+  font: inherit; color: inherit;
+  text-align: right;
+  cursor: pointer;
+}
+.segment__time--seek:hover { color: var(--accent); }
+
+/* Click-to-edit transcript text. */
+.segment__text--editable { cursor: text; border-radius: 4px; }
+.segment__text--editable:hover { background: var(--bg-hover); }
+.segment__editor {
+  width: 100%;
+  padding: 4px 6px;
+  font: inherit; line-height: inherit;
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--accent); border-radius: 6px;
+  outline: none;
+  resize: vertical;
+}
+
+/* Action-items hub. */
+.action-items {
+  display: flex; flex-direction: column; gap: 22px;
+  max-width: 680px; margin: 0 auto; width: 100%;
+}
+.action-group__title {
+  background: none; border: none; padding: 0;
+  font-size: 14px; font-weight: 600;
+  color: var(--accent);
+}
+.action-group__title:hover { text-decoration: underline; }
+.action-group__list {
+  list-style: none; padding: 6px 0 0; margin: 0;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.action-item {
+  display: flex; align-items: baseline; gap: 10px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.action-item input { accent-color: var(--accent); cursor: pointer; }
+.action-item--done span { color: var(--text-tertiary); text-decoration: line-through; }
+
+/* Model-download + call-detected banners (above the live transcript). */
+.model-banner,
+.detect-banner {
+  display: flex; align-items: center; gap: 14px;
+  margin: 10px 24px 0;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border); border-radius: var(--radius);
+}
+.model-banner--error { border-color: var(--record); }
+.model-banner__bar {
+  flex: 1; height: 6px; min-width: 80px;
+  background: var(--bg-hover);
+  border-radius: 999px; overflow: hidden;
+}
+.model-banner__fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+  transition: width 400ms ease;
+}
+.model-banner__button,
+.detect-banner__record {
+  padding: 5px 12px;
+  font-size: 12.5px; font-weight: 600;
+  color: #fff;
+  background: var(--accent);
+  border: none; border-radius: 999px;
+  white-space: nowrap;
+}
+.model-banner__button:hover,
+.detect-banner__record:hover { filter: brightness(1.1); }
+.detect-banner__actions { display: flex; gap: 8px; margin-left: auto; }
+.detect-banner__dismiss {
+  padding: 5px 12px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid var(--border); border-radius: 999px;
+}
+.detect-banner__dismiss:hover { background: var(--bg-hover); }
+
+/* Settings: secondary button + inline error. */
+.settings__secondary {
+  align-self: flex-start;
+  padding: 6px 14px;
+  font-size: 13px; font-weight: 500;
+  color: var(--text-primary);
+  background: var(--bg-hover);
+  border: 1px solid var(--border); border-radius: 8px;
+}
+.settings__secondary:hover { background: var(--border); }
+.settings__error { color: var(--record); }
+
+/* ===== Canvas UI pass (Aug 2026): monochrome chrome · SVG icons · mono values ===== */
+
+/* Icon + label buttons align the SVG on the text baseline row. */
+.export-menu__button { display: inline-flex; align-items: center; gap: 5px; }
+.sidebar__settings,
+.modal__close { display: inline-flex; align-items: center; justify-content: center; }
+.sidebar__settings { color: var(--text-secondary); }
+
+/* Filled primary = near-white surface, so its text/glyphs go dark.
+   (Overrides the earlier color:#fff on these same buttons.) */
+.settings__save,
+.chat__send,
+.chat__msg--user .chat__bubble,
+.model-banner__button,
+.detect-banner__record { color: var(--on-accent); }
+
+/* Search field with a leading icon. */
+.search-field { position: relative; display: flex; align-items: center; }
+.search-field__icon {
+  position: absolute; left: 10px;
+  color: var(--text-tertiary);
+  pointer-events: none;
+}
+.search-field .search-input { padding-left: 32px; }
+
+/* Near-white borders read too loud on hover — brighten subtly instead. */
+.search-result:hover { border-color: var(--border-strong); }
+
+/* Technical values in monospace — the "instrument" texture from Canvas UI. */
+.elapsed,
+.segment__time,
+.meeting-item__meta,
+.search-result__meta,
+.topbar__source {
+  font-family: var(--font-mono);
+  letter-spacing: 0;
+}
+
+/* Keyboard focus rings — visible for keyboard/AT users, absent on mouse click
+   (HIG-style). Pointer focus keeps the quieter per-control focus styles. */
+button:focus-visible,
+a:focus-visible,
+summary:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
 }

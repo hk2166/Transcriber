@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { downloadExport } from "./api";
+import { IconChevronDown } from "./Icons";
 import { toast } from "./toast";
 
 const FORMATS = [
@@ -44,7 +45,8 @@ export function ExportMenu({
   return (
     <div className="export-menu" ref={ref}>
       <button className="export-menu__button" onClick={() => setOpen((o) => !o)}>
-        Export ▾
+        Export
+        <IconChevronDown size={14} />
       </button>
       {open && (
         <div className="export-menu__list">
