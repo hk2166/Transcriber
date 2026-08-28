@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion, MotionConfig } from "framer-motion";
 
 import {
   getMeetingSegments,
@@ -36,6 +37,7 @@ import { SourceSelector } from "./SourceSelector";
 import { SummaryPanel } from "./SummaryPanel";
 import { toast } from "./toast";
 import { Toasts } from "./Toasts";
+import { viewSwap } from "./motion";
 import { useRecorder, type RecorderStatus } from "./useRecorder";
 import { VolumeMeter } from "./VolumeMeter";
 
@@ -259,7 +261,17 @@ function App() {
   const selectedMeeting = meetings.find((m) => m.id === selectedId) ?? null;
   const viewingPast = selectedMeeting !== null;
 
+  // Identity of the currently shown view — drives the crossfade transition.
+  const viewKey = searchQuery.trim()
+    ? "search"
+    : showActions
+      ? "actions"
+      : viewingPast
+        ? `past-${selectedId}`
+        : "live";
+
   return (
+    <MotionConfig reducedMotion="user">
     <div className="app">
       <aside className="sidebar">
         <div className="sidebar__header">
@@ -333,19 +345,30 @@ function App() {
         </div>
       </aside>
 
-      {showSettings && (
-        <SettingsPanel
-          onClose={() => setShowSettings(false)}
-          onReset={() => {
-            newRecording();
-            refreshMeetings();
-          }}
-        />
-      )}
+      <AnimatePresence>
+        {showSettings && (
+          <SettingsPanel
+            onClose={() => setShowSettings(false)}
+            onReset={() => {
+              newRecording();
+              refreshMeetings();
+            }}
+          />
+        )}
+      </AnimatePresence>
 
       <Toasts />
 
       <main className="main">
+        {/* Keyed remount runs the enter animation on every view change —
+            simpler and more robust than a wait-mode exit handoff. */}
+        <motion.div
+          key={viewKey}
+          className="view"
+          variants={viewSwap}
+          initial="initial"
+          animate="animate"
+        >
         {searchQuery.trim() ? (
           <>
             <header className="topbar">
@@ -533,8 +556,10 @@ function App() {
             </footer>
           </>
         )}
+          </motion.div>
       </main>
     </div>
+    </MotionConfig>
   );
 }
 

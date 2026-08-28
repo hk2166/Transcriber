@@ -805,3 +805,22 @@ summary:focus-visible,
   outline-offset: 2px;
   border-radius: 6px;
 }
+
+/* Motion (Framer Motion): the crossfade view container fills the main panel. */
+.view {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Contextual banners slide in when they mount (springs handle the rest in JS). */
+@keyframes banner-in {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.model-banner,
+.detect-banner { animation: banner-in 0.3s cubic-bezier(0.32, 0.72, 0, 1); }
+@media (prefers-reduced-motion: reduce) {
+  .model-banner, .detect-banner { animation: none; }
+}

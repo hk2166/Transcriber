@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { motion } from "framer-motion";
 
 import type { Speaker, TranscriptSegment } from "./api";
+import { segmentIn } from "./motion";
 
 interface LiveTranscriptProps {
   segments: TranscriptSegment[];
@@ -207,10 +209,15 @@ export function LiveTranscript({
               : undefined;
           const active = index === activeIndex;
           return (
-            <li
+            <motion.li
               className={"segment" + (active ? " segment--active" : "")}
               key={segment.id ?? `${segment.start_ms}-${index}`}
               ref={active ? activeRef : undefined}
+              variants={segmentIn}
+              // Live: each new line springs in. Past: appear instantly — the
+              // whole-view crossfade already handles the entrance.
+              initial={recording ? "initial" : false}
+              animate="animate"
             >
               {onSeek ? (
                 <button
@@ -236,7 +243,7 @@ export function LiveTranscript({
                 )}
                 <SegmentText segment={segment} onEdit={onEditSegment} />
               </span>
-            </li>
+            </motion.li>
           );
         })}
       </ol>

@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
+import { motion } from "framer-motion";
 
+import { scrim, sheet } from "./motion";
 import {
   getSettings,
   getSystemStatus,
@@ -46,11 +48,22 @@ export function SettingsPanel({
 
   if (!settings) {
     return (
-      <div className="modal-backdrop" onClick={onClose}>
-        <div className="modal" onClick={(e) => e.stopPropagation()}>
+      <motion.div
+        className="modal-backdrop"
+        onClick={onClose}
+        variants={scrim}
+        initial="initial"
+        animate="animate"
+        exit="exit"
+      >
+        <motion.div
+          className="modal"
+          onClick={(e) => e.stopPropagation()}
+          variants={sheet}
+        >
           <p className="settings__loading">Loading settings…</p>
-        </div>
-      </div>
+        </motion.div>
+      </motion.div>
     );
   }
 
@@ -80,8 +93,19 @@ export function SettingsPanel({
     : [settings.ollama_model];
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+    <motion.div
+      className="modal-backdrop"
+      onClick={onClose}
+      variants={scrim}
+      initial="initial"
+      animate="animate"
+      exit="exit"
+    >
+      <motion.div
+        className="modal"
+        onClick={(e) => e.stopPropagation()}
+        variants={sheet}
+      >
         <header className="modal__header">
           <h2>Settings</h2>
           <button className="modal__close" onClick={onClose} aria-label="Close">
@@ -189,8 +213,8 @@ export function SettingsPanel({
             </button>
           </div>
         </footer>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
 
