@@ -6,6 +6,7 @@ import logging
 from collections.abc import Iterator
 from typing import Any
 
+import httpx
 import ollama
 
 logger = logging.getLogger(__name__)
@@ -14,7 +15,7 @@ __all__ = ["OllamaClient", "OllamaUnavailable"]
 
 
 class OllamaUnavailable(RuntimeError):
-    """Raised when the Ollama server can't be reached."""
+    """Raised when Ollama can't serve a request (offline, or model missing)."""
 
 
 class OllamaClient:
@@ -36,6 +37,23 @@ class OllamaClient:
         messages.append({"role": "user", "content": prompt})
         return messages
 
+    def _translate(self, exc: Exception) -> OllamaUnavailable:
+        """Turn a low-level failure into an actionable, user-facing message.
+
+        The ``ollama`` client talks over httpx, so an unreachable server
+        surfaces as ``httpx.ConnectError`` — NOT Python's builtin
+        ``ConnectionError`` — and a missing model as ``ollama.ResponseError``.
+        Both must be caught for the app to degrade gracefully.
+        """
+        if isinstance(exc, ollama.ResponseError) and "not found" in str(exc).lower():
+            return OllamaUnavailable(
+                f'The model "{self.model}" isn\'t installed. '
+                f"Run: ollama pull {self.model}"
+            )
+        return OllamaUnavailable(
+            "Ollama isn't running. Open the Ollama app and try again."
+        )
+
     def complete(
         self,
         prompt: str,
@@ -51,10 +69,8 @@ class OllamaClient:
                 format=format,
                 options=options or {},
             )
-        except ConnectionError as exc:
-            raise OllamaUnavailable(
-                "Ollama is not running. Start it with `ollama serve`."
-            ) from exc
+        except (ConnectionError, httpx.HTTPError, ollama.ResponseError) as exc:
+            raise self._translate(exc) from exc
         return response.message.content or ""
 
     def stream(
@@ -74,7 +90,5 @@ class OllamaClient:
                 piece = chunk.message.content
                 if piece:
                     yield piece
-        except ConnectionError as exc:
-            raise OllamaUnavailable(
-                "Ollama is not running. Start it with `ollama serve`."
-            ) from exc
+        except (ConnectionError, httpx.HTTPError, ollama.ResponseError) as exc:
+            raise self._translate(exc) from exc

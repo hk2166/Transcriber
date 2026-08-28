@@ -22,7 +22,13 @@ logger = logging.getLogger(__name__)
 
 _embedder: Embedder | None = None
 _store: VectorStore | None = None
-_lock = threading.Lock()
+_lock = threading.Lock()  # guards lazy init of the singletons
+#: Serialises store mutation+save. Index edits, post-meeting indexing, and
+#: deletes all mutate the one store from different threads; without this their
+#: read-modify-write on the parallel arrays (and the .npz save) can interleave
+#: and corrupt the index. Distinct from _lock to keep a simple lock order
+#: (_write_lock → _lock, never the reverse).
+_write_lock = threading.Lock()
 
 
 @dataclass
@@ -73,11 +79,13 @@ def index_meeting(meeting_id: int) -> None:
     if not segments:
         return
     embedder = _get_embedder()
-    store = _get_store()
+    # Encoding is slow and touches nothing shared — keep it out of the lock.
     vectors = embedder.encode([s.text for s in segments])
-    store.remove_meeting(meeting_id)
-    store.add([s.id for s in segments], meeting_id, vectors)
-    store.save(_index_path())
+    with _write_lock:
+        store = _get_store()
+        store.remove_meeting(meeting_id)
+        store.add([s.id for s in segments], meeting_id, vectors)
+        store.save(_index_path())
     logger.info("Indexed %d segments for meeting %d.", len(segments), meeting_id)
 
 
@@ -85,9 +93,10 @@ def remove_meeting(meeting_id: int) -> None:
     """Evict a deleted meeting's vectors (store only — no embedder needed)."""
     if _store is None and not _index_path().exists():
         return
-    store = _get_store()
-    store.remove_meeting(meeting_id)
-    store.save(_index_path())
+    with _write_lock:
+        store = _get_store()
+        store.remove_meeting(meeting_id)
+        store.save(_index_path())
 
 
 def search(query: str, k: int = 10) -> list[SearchResult]:

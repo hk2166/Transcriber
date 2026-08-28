@@ -11,6 +11,8 @@ id, so a deleted meeting can be evicted in one call.
 
 from __future__ import annotations
 
+import os
+import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -72,12 +74,31 @@ class VectorStore:
         ]
 
     def save(self, path: Path | str) -> None:
-        np.savez(
-            path,
-            seg_ids=self._seg_ids,
-            meeting_ids=self._meeting_ids,
-            vectors=self._vectors,
-        )
+        """Persist atomically: write a temp file, then rename over ``path``.
+
+        ``np.savez`` writes in place and isn't atomic, so an interrupted save
+        (or two overlapping ones) could leave a truncated .npz that fails to
+        load. Writing to a sibling temp file and ``os.replace``-ing avoids that.
+        """
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".npz.tmp")
+        try:
+            with os.fdopen(fd, "wb") as handle:
+                # Passing a file object stops np.savez from appending ".npz".
+                np.savez(
+                    handle,
+                    seg_ids=self._seg_ids,
+                    meeting_ids=self._meeting_ids,
+                    vectors=self._vectors,
+                )
+            os.replace(tmp, path)
+        except BaseException:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise
 
     @classmethod
     def load(cls, path: Path | str, dim: int) -> VectorStore:
