@@ -36,6 +36,11 @@ class StopResponse(BaseModel):
     wav_path: str
 
 
+class PauseResponse(BaseModel):
+    session_id: str
+    paused: bool
+
+
 @router.post("/start", response_model=StartResponse)
 async def start_session(request: StartRequest) -> StartResponse:
     """Start a recording session. 409 if one is active, 503 if the
@@ -68,6 +73,26 @@ async def stop_session() -> StopResponse:
         frames_written=session.recorder.frames_written,
         wav_path=str(session.recorder.path),
     )
+
+
+@router.post("/pause", response_model=PauseResponse)
+async def pause_session() -> PauseResponse:
+    """Pause the active session. 409 if none is running."""
+    session = manager.active
+    if session is None:
+        raise HTTPException(status_code=409, detail="No active session to pause.")
+    session.pause()
+    return PauseResponse(session_id=session.session_id, paused=True)
+
+
+@router.post("/resume", response_model=PauseResponse)
+async def resume_session() -> PauseResponse:
+    """Resume a paused session. 409 if none is running."""
+    session = manager.active
+    if session is None:
+        raise HTTPException(status_code=409, detail="No active session to resume.")
+    session.resume()
+    return PauseResponse(session_id=session.session_id, paused=False)
 
 
 @router.websocket("/stream/{session_id}")

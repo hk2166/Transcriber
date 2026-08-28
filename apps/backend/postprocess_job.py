@@ -24,6 +24,7 @@ from packages.storage import (
     create_speakers,
     get_segments,
     get_speakers,
+    replace_action_items,
     save_summary,
     set_meeting_status,
     set_meeting_title,
@@ -46,9 +47,23 @@ def _get_diarizer() -> SpeakerDiarizer:
     return _diarizer
 
 
+async def _diarization_turns(wav_path: str) -> list:
+    """In-process pyannote if importable (dev), else the optional speaker
+    pack's subprocess (packaged app). Raises when neither is available."""
+    try:
+        diarizer = await asyncio.to_thread(_get_diarizer)
+        return await asyncio.to_thread(diarizer.diarize_file, wav_path)
+    except Exception:
+        import speaker_pack
+
+        if speaker_pack.installed():
+            logger.info("In-process diarization unavailable — using the speaker pack.")
+            return await asyncio.to_thread(speaker_pack.diarize_file, wav_path)
+        raise
+
+
 async def _diarize(meeting_id: int, wav_path: str, segments: list[Segment]) -> None:
-    diarizer = await asyncio.to_thread(_get_diarizer)
-    turns = await asyncio.to_thread(diarizer.diarize_file, wav_path)
+    turns = await _diarization_turns(wav_path)
     labels = [turn.speaker for turn in turns]
     if not labels:
         return
@@ -86,6 +101,9 @@ async def _summarize(meeting_id: int, segments: list[Segment]) -> None:
         decisions=result.decisions,
         open_questions=result.open_questions,
     )
+    # Mirror the summary's action items into the cross-meeting hub table
+    # (done-state carries over for unchanged texts).
+    replace_action_items(db, meeting_id, result.action_items)
     if title:
         set_meeting_title(db, meeting_id, title)
 

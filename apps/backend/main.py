@@ -12,7 +12,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+import meeting_detect
 from database import close_db, get_db
+from routers.action_items import router as action_items_router
 from routers.audio import router as audio_router
 from routers.chat import router as chat_router
 from routers.export import router as export_router
@@ -47,8 +49,15 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    import asyncio
+    from contextlib import suppress
+
     get_db()  # open + migrate before serving
+    detect_task = asyncio.create_task(meeting_detect.poller())
     yield
+    detect_task.cancel()
+    with suppress(asyncio.CancelledError):
+        await detect_task
     close_db()
 
 
@@ -93,6 +102,7 @@ app.include_router(search_router)
 app.include_router(chat_router)
 app.include_router(export_router)
 app.include_router(settings_router)
+app.include_router(action_items_router)
 
 @app.get("/health", tags=["meta"])
 async def health() -> dict[str, str]:

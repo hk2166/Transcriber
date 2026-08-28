@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 __all__ = [
+    "ActionItem",
     "Meeting",
     "Segment",
     "Speaker",
@@ -21,17 +22,22 @@ __all__ = [
     "create_speakers",
     "delete_meeting",
     "end_meeting",
+    "get_action_items",
     "get_meeting",
     "get_meetings",
     "get_segments",
+    "get_segments_by_ids",
     "get_speakers",
     "get_summary",
     "insert_segment",
     "rename_speaker",
+    "replace_action_items",
     "save_summary",
+    "set_action_item_done",
     "set_meeting_status",
     "set_meeting_title",
     "set_segment_speaker",
+    "update_segment_text",
 ]
 
 #: Deterministic per-speaker colours (Apple system palette), assigned by order.
@@ -87,6 +93,16 @@ class StoredSummary:
     action_items: list[str]
     decisions: list[str]
     open_questions: list[str]
+
+
+@dataclass
+class ActionItem:
+    id: int
+    meeting_id: int
+    meeting_title: str
+    meeting_started_at: str
+    text: str
+    done: bool
 
 
 def _title_for(started_at: datetime) -> str:
@@ -288,6 +304,71 @@ def set_segment_speaker(
         (speaker_id, segment_id),
     )
     conn.commit()
+
+
+def update_segment_text(conn: sqlite3.Connection, segment_id: int, text: str) -> bool:
+    """Correct a segment's transcript text; return False if it is unknown."""
+    cursor = conn.execute(
+        "UPDATE transcript_segments SET text = ? WHERE id = ?", (text, segment_id)
+    )
+    conn.commit()
+    return cursor.rowcount > 0
+
+
+def replace_action_items(
+    conn: sqlite3.Connection, meeting_id: int, texts: list[str]
+) -> None:
+    """Replace a meeting's action items (called on every (re)summarise).
+
+    Done-state carries over for items whose text is unchanged, so
+    re-summarising doesn't un-check completed work.
+    """
+    done_by_text = {
+        row["text"]: row["done"]
+        for row in conn.execute(
+            "SELECT text, done FROM action_items WHERE meeting_id = ?", (meeting_id,)
+        )
+    }
+    conn.execute("DELETE FROM action_items WHERE meeting_id = ?", (meeting_id,))
+    conn.executemany(
+        "INSERT INTO action_items (meeting_id, text, done, position) "
+        "VALUES (?, ?, ?, ?)",
+        [
+            (meeting_id, text, done_by_text.get(text, 0), position)
+            for position, text in enumerate(texts)
+        ],
+    )
+    conn.commit()
+
+
+def get_action_items(conn: sqlite3.Connection) -> list[ActionItem]:
+    """Every meeting's action items, newest meeting first, in summary order."""
+    rows = conn.execute(
+        "SELECT ai.id, ai.meeting_id, ai.text, ai.done, "
+        "m.title AS meeting_title, m.started_at AS meeting_started_at "
+        "FROM action_items ai JOIN meetings m ON m.id = ai.meeting_id "
+        "ORDER BY m.started_at DESC, ai.position, ai.id"
+    ).fetchall()
+    return [
+        ActionItem(
+            id=row["id"],
+            meeting_id=row["meeting_id"],
+            meeting_title=row["meeting_title"],
+            meeting_started_at=row["meeting_started_at"],
+            text=row["text"],
+            done=bool(row["done"]),
+        )
+        for row in rows
+    ]
+
+
+def set_action_item_done(conn: sqlite3.Connection, item_id: int, done: bool) -> bool:
+    """Check or un-check one action item; return False if it is unknown."""
+    cursor = conn.execute(
+        "UPDATE action_items SET done = ? WHERE id = ?", (int(done), item_id)
+    )
+    conn.commit()
+    return cursor.rowcount > 0
 
 
 def rename_speaker(conn: sqlite3.Connection, speaker_id: int, name: str) -> bool:

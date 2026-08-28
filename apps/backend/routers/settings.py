@@ -3,15 +3,20 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 import ollama
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+import meeting_detect
+import model_download
 import search_index
 import settings as settings_module
+import speaker_pack
 from database import close_db, db_path, get_db
 from packages.audio import SystemAudioCapture, default_recordings_dir
+from sessions import manager
 from settings import Settings, get_settings, save_settings
 
 logger = logging.getLogger(__name__)
@@ -58,6 +63,39 @@ def system_status() -> SystemStatus:
         blackhole_available=blackhole_available,
         whisper_model=get_settings().whisper_model,
     )
+
+
+@router.get("/system/model-status")
+def model_status() -> dict[str, Any]:
+    """Download state of the configured Whisper model (polled by the UI)."""
+    return model_download.status(get_settings().whisper_model)
+
+
+@router.post("/system/model-download")
+def model_download_start() -> dict[str, Any]:
+    """Pre-fetch the configured Whisper model with visible progress."""
+    return model_download.start(get_settings().whisper_model)
+
+
+@router.get("/system/meeting-app")
+def meeting_app() -> dict[str, Any]:
+    """Currently detected meeting app (Zoom/Webex), if any."""
+    detected = meeting_detect.current()
+    detected["recording"] = manager.active is not None
+    detected["mode"] = get_settings().auto_record
+    return detected
+
+
+@router.get("/system/speaker-pack")
+def speaker_pack_status() -> dict[str, Any]:
+    """Install state of the optional diarization pack."""
+    return speaker_pack.status()
+
+
+@router.post("/system/speaker-pack-install")
+def speaker_pack_install() -> dict[str, Any]:
+    """Download + install the speaker pack in the background."""
+    return speaker_pack.start_install()
 
 
 @router.post("/system/reset")

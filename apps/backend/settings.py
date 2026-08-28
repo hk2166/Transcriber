@@ -11,6 +11,8 @@ import logging
 import threading
 from pathlib import Path
 
+from typing import Literal
+
 from pydantic import BaseModel
 
 from packages.audio import default_recordings_dir
@@ -27,6 +29,9 @@ class Settings(BaseModel):
     vad_threshold: float = 0.5
     default_source: str = "both"
     auto_summarize: bool = True
+    #: What to do when a meeting app (Zoom/Webex) starts a call:
+    #: "off" = ignore, "prompt" = offer to record, "auto" = start recording.
+    auto_record: Literal["off", "prompt", "auto"] = "prompt"
 
 
 def _path() -> Path:

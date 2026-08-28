@@ -114,6 +114,13 @@ class AudioSession:
         )
         self._speech_active = False
 
+        # Pause gates the whole _on_block path at once: recorder, VAD, and
+        # stream all freeze together, so the segmenter's sample clock stays
+        # aligned with the WAV file (timestamps are sample-count time).
+        # Written on the event loop, read on the audio thread — same lone-bool
+        # pattern as _speech_active.
+        self._paused = False
+
         # Speech segments cross from the audio thread to the transcriber
         # worker via _seg_queue; finished transcripts fan out to the
         # transcription WebSocket via transcript_queue.
@@ -149,6 +156,8 @@ class AudioSession:
 
     def _on_block(self, block: np.ndarray) -> None:
         """Audio-thread callback: tee to disk, run VAD, then stream."""
+        if self._paused:
+            return
         self.recorder.write(block)
         if self._segmenter is not None:
             for segment in self._segmenter.process(block):
@@ -235,6 +244,28 @@ class AudioSession:
         read/write needs no lock under CPython.
         """
         return self._speech_active
+
+    @property
+    def paused(self) -> bool:
+        """True while the session is paused (capture running, blocks dropped)."""
+        return self._paused
+
+    def pause(self) -> None:
+        """Freeze the pipeline without tearing anything down.
+
+        The capture devices keep running (no re-open race on resume); blocks
+        are simply dropped at the top of ``_on_block``. Mid-speech buffers in
+        the segmenter stay put — on resume the segment continues, which
+        matches the gapless WAV exactly.
+        """
+        self._paused = True
+        self._speech_active = False
+        logger.info("Session %s paused.", self.session_id)
+
+    def resume(self) -> None:
+        """Un-freeze the pipeline; audio flows again on the next block."""
+        self._paused = False
+        logger.info("Session %s resumed.", self.session_id)
 
     def start(self) -> None:
         """Start recorder and capture; on capture failure, leave no debris."""

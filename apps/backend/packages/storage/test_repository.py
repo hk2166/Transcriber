@@ -175,3 +175,66 @@ def test_save_summary_replaces_existing(conn):
     stored = get_summary(conn, meeting_id)
     assert stored.summary == "second"
     assert stored.key_points == ["x"]
+
+
+# ---------------------------------------------------------------------------
+# Segment editing + action items (feature round, Aug 2026)
+# ---------------------------------------------------------------------------
+
+from packages.storage import (  # noqa: E402
+    get_action_items,
+    replace_action_items,
+    set_action_item_done,
+    update_segment_text,
+)
+
+
+def test_update_segment_text(conn):
+    meeting_id = _new_meeting(conn)
+    segment_id = insert_segment(
+        conn, meeting_id, text="helo wrld", start_ms=0, end_ms=900,
+        language="en", confidence=0.9,
+    )
+    assert update_segment_text(conn, segment_id, "hello world") is True
+    assert get_segments(conn, meeting_id)[0].text == "hello world"
+
+
+def test_update_segment_text_unknown_id(conn):
+    assert update_segment_text(conn, 999, "nope") is False
+
+
+def test_action_items_roundtrip(conn):
+    meeting_id = _new_meeting(conn)
+    replace_action_items(conn, meeting_id, ["Send the deck", "Book the review"])
+    items = get_action_items(conn)
+    assert [i.text for i in items] == ["Send the deck", "Book the review"]
+    assert all(i.done is False for i in items)
+    assert items[0].meeting_id == meeting_id
+    assert items[0].meeting_title  # joined from meetings
+
+
+def test_action_item_done_toggle(conn):
+    meeting_id = _new_meeting(conn)
+    replace_action_items(conn, meeting_id, ["Send the deck"])
+    item = get_action_items(conn)[0]
+    assert set_action_item_done(conn, item.id, True) is True
+    assert get_action_items(conn)[0].done is True
+    assert set_action_item_done(conn, 999, True) is False
+
+
+def test_action_items_done_survives_resummarize(conn):
+    meeting_id = _new_meeting(conn)
+    replace_action_items(conn, meeting_id, ["Send the deck", "Book the review"])
+    item = get_action_items(conn)[0]
+    set_action_item_done(conn, item.id, True)
+    # Re-summarise keeps one text, changes the other.
+    replace_action_items(conn, meeting_id, ["Send the deck", "Email the notes"])
+    by_text = {i.text: i.done for i in get_action_items(conn)}
+    assert by_text == {"Send the deck": True, "Email the notes": False}
+
+
+def test_action_items_cascade_on_delete(conn):
+    meeting_id = _new_meeting(conn)
+    replace_action_items(conn, meeting_id, ["Send the deck"])
+    delete_meeting(conn, meeting_id)
+    assert get_action_items(conn) == []
