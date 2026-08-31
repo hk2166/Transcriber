@@ -4,9 +4,21 @@ from __future__ import annotations
 
 import logging
 
+from typing import Any, Protocol
+
 from pydantic import BaseModel, ValidationError
 
-from packages.intelligence.client import OllamaClient
+
+class CompletesLike(Protocol):
+    """Any LLM client with a ``complete`` method (Ollama or cloud)."""
+
+    def complete(
+        self,
+        prompt: str,
+        system: str | None = None,
+        format: Any = None,
+        options: dict[str, Any] | None = None,
+    ) -> str: ...
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +58,7 @@ _TITLE_SYSTEM = "You name meetings. Reply with only a short title, 3–7 words, 
 _TITLE_PROMPT = "Give a short, specific title for this meeting:\n\n{transcript}"
 
 
-def summarize(client: OllamaClient, transcript: str) -> MeetingSummary:
+def summarize(client: CompletesLike, transcript: str) -> MeetingSummary:
     """One structured call → validated summary, with a single retry on bad JSON."""
     text = transcript[:MAX_TRANSCRIPT_CHARS]
     schema = MeetingSummary.model_json_schema()
@@ -63,7 +75,7 @@ def summarize(client: OllamaClient, transcript: str) -> MeetingSummary:
     raise ValueError(f"Model did not return a valid summary: {last_error}")
 
 
-def generate_title(client: OllamaClient, transcript: str) -> str:
+def generate_title(client: CompletesLike, transcript: str) -> str:
     """Short LLM title (replaces the date-based auto-title)."""
     text = transcript[: MAX_TRANSCRIPT_CHARS // 3]
     reply = client.complete(_TITLE_PROMPT.format(transcript=text), system=_TITLE_SYSTEM)

@@ -14,7 +14,6 @@ import threading
 from database import get_db
 from packages.diarization import SpeakerDiarizer, assign_speaker
 from packages.intelligence import (
-    OllamaClient,
     OllamaUnavailable,
     generate_title,
     summarize,
@@ -86,7 +85,9 @@ def _build_transcript(meeting_id: int, segments: list[Segment]) -> str:
 
 
 async def _summarize(meeting_id: int, segments: list[Segment]) -> None:
-    client = OllamaClient()
+    import llm
+
+    client = llm.current_client()
     transcript = _build_transcript(meeting_id, segments)
     title = await asyncio.to_thread(generate_title, client, transcript)
     result = await asyncio.to_thread(summarize, client, transcript)

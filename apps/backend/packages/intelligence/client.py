@@ -9,13 +9,15 @@ from typing import Any
 import httpx
 import ollama
 
+from packages.intelligence.providers import LLMUnavailable
+
 logger = logging.getLogger(__name__)
 
 __all__ = ["OllamaClient", "OllamaUnavailable"]
 
-
-class OllamaUnavailable(RuntimeError):
-    """Raised when Ollama can't serve a request (offline, or model missing)."""
+#: One exception class for every provider — existing `except OllamaUnavailable`
+#: sites (postprocess, chat) catch cloud failures too.
+OllamaUnavailable = LLMUnavailable
 
 
 class OllamaClient:

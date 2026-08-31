@@ -121,6 +121,33 @@ export interface Settings {
   default_source: AudioSource;
   auto_summarize: boolean;
   auto_record: "off" | "prompt" | "auto";
+  llm_provider: string;
+  llm_model: string;
+  llm_base_url: string;
+  api_keys: Record<string, string>;
+}
+
+export interface LLMProvider {
+  id: string;
+  label: string;
+  default_model: string;
+  needs_key: boolean;
+  needs_base_url: boolean;
+  key_url: string;
+  local: boolean;
+}
+
+export function getLLMProviders(): Promise<LLMProvider[]> {
+  return getJson<LLMProvider[]>("/llm/providers");
+}
+
+export function testLLM(
+  candidate: Settings,
+): Promise<{ ok: boolean; error?: string; reply?: string }> {
+  return postJson<{ ok: boolean; error?: string; reply?: string }>(
+    "/llm/test",
+    candidate,
+  );
 }
 
 export interface SystemStatus {

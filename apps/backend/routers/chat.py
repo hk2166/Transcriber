@@ -13,9 +13,10 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+import llm
 import search_index
 from database import get_db
-from packages.intelligence import MeetingRAG, OllamaClient, OllamaUnavailable
+from packages.intelligence import MeetingRAG, OllamaUnavailable
 from packages.storage import get_meeting, get_segments
 
 router = APIRouter(prefix="/meetings", tags=["chat"])
@@ -36,7 +37,11 @@ def chat(meeting_id: int, request: ChatRequest) -> StreamingResponse:
         raise HTTPException(status_code=404, detail=f"Meeting {meeting_id} not found.")
 
     segments = get_segments(get_db(), meeting_id)
-    rag = MeetingRAG(OllamaClient(), search_index.get_embedder())
+    try:
+        client = llm.current_client()
+    except OllamaUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    rag = MeetingRAG(client, search_index.get_embedder())
     retrieved = rag.retrieve(request.question, [(s.id, s.text) for s in segments])
 
     def stream():

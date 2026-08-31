@@ -32,6 +32,16 @@ class Settings(BaseModel):
     #: What to do when a meeting app (Zoom/Webex) starts a call:
     #: "off" = ignore, "prompt" = offer to record, "auto" = start recording.
     auto_record: Literal["off", "prompt", "auto"] = "prompt"
+    #: Which LLM powers summaries/titles/chat. "ollama" keeps everything
+    #: on-device; any other provider sends transcript text to that API.
+    llm_provider: str = "ollama"
+    #: Cloud model id; empty = the provider's default.
+    llm_model: str = ""
+    #: Server URL for the "custom" (OpenAI-compatible) provider.
+    llm_base_url: str = ""
+    #: Per-provider API keys, e.g. {"openai": "sk-…"}. Stored in settings.json
+    #: (chmod 600) — local single-user app.
+    api_keys: dict[str, str] = {}
 
 
 def _path() -> Path:
@@ -57,9 +67,13 @@ def get_settings() -> Settings:
 def save_settings(new: Settings) -> Settings:
     global _cached
     with _lock:
-        _path().write_text(new.model_dump_json(indent=2))
+        path = _path()
+        path.write_text(new.model_dump_json(indent=2))
+        path.chmod(0o600)  # may hold API keys — owner-only
         _cached = new
-    logger.info("Settings saved: %s", new.model_dump())
+    redacted = new.model_dump()
+    redacted["api_keys"] = {k: "•••" for k in redacted.get("api_keys", {})}
+    logger.info("Settings saved: %s", redacted)
     return _cached
 
 

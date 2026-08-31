@@ -14,9 +14,16 @@ from typing import Protocol
 
 import numpy as np
 
-from packages.intelligence.client import OllamaClient
 
 logger = logging.getLogger(__name__)
+
+
+class LLMLike(Protocol):
+    """Any client with a streaming chat method."""
+
+    def stream(
+        self, prompt: str, system: str | None = None, options: dict | None = None
+    ): ...
 
 
 class EmbedderLike(Protocol):
@@ -47,7 +54,7 @@ _SYSTEM = (
 class MeetingRAG:
     """Question answering grounded in one meeting's transcript."""
 
-    def __init__(self, client: OllamaClient, embedder: EmbedderLike) -> None:
+    def __init__(self, client: LLMLike, embedder: EmbedderLike) -> None:
         self.client = client
         self.embedder = embedder
 

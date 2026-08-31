@@ -3,11 +3,14 @@ import { motion } from "framer-motion";
 
 import { scrim, sheet } from "./motion";
 import {
+  getLLMProviders,
   getSettings,
   getSystemStatus,
   putSettings,
   resetAllData,
+  testLLM,
   type AudioSource,
+  type LLMProvider,
   type Settings,
   type SystemStatus,
 } from "./api";
@@ -31,10 +34,15 @@ export function SettingsPanel({
   const [settings, setSettings] = useState<Settings | null>(null);
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [saving, setSaving] = useState(false);
+  const [providers, setProviders] = useState<LLMProvider[]>([]);
+  const [testState, setTestState] = useState<
+    { kind: "idle" } | { kind: "testing" } | { kind: "ok" } | { kind: "fail"; message: string }
+  >({ kind: "idle" });
 
   useEffect(() => {
     getSettings().then(setSettings).catch(() => setSettings(null));
     getSystemStatus().then(setStatus).catch(() => setStatus(null));
+    getLLMProviders().then(setProviders).catch(() => setProviders([]));
   }, []);
 
   // Dismiss on Escape, like a native macOS sheet.
@@ -92,6 +100,22 @@ export function SettingsPanel({
     ? status.ollama_models
     : [settings.ollama_model];
 
+  const provider = providers.find((p) => p.id === settings.llm_provider);
+
+  const runTest = async () => {
+    setTestState({ kind: "testing" });
+    try {
+      const result = await testLLM(settings);
+      setTestState(
+        result.ok
+          ? { kind: "ok" }
+          : { kind: "fail", message: result.error ?? "No reply from the model." },
+      );
+    } catch {
+      setTestState({ kind: "fail", message: "Couldn't reach the backend." });
+    }
+  };
+
   return (
     <motion.div
       className="modal-backdrop"
@@ -133,19 +157,120 @@ export function SettingsPanel({
           <small>A change applies after restart.</small>
         </label>
 
-        <label className="settings__field">
-          <span>Summary model</span>
-          <select
-            value={settings.ollama_model}
-            onChange={(e) => patch({ ollama_model: e.target.value })}
-          >
-            {ollamaModels.map((m) => (
-              <option key={m} value={m}>
-                {m}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className="settings__group">
+          <label className="settings__field">
+            <span>AI provider (summaries &amp; chat)</span>
+            <select
+              value={settings.llm_provider}
+              onChange={(e) => {
+                patch({ llm_provider: e.target.value, llm_model: "" });
+                setTestState({ kind: "idle" });
+              }}
+            >
+              {(providers.length
+                ? providers
+                : [{ id: "ollama", label: "Local (Ollama)" } as LLMProvider]
+              ).map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+            {provider && !provider.local && (
+              <small className="settings__privacy">
+                Transcripts are sent to {provider.label} for summaries and chat.
+                Local (Ollama) keeps everything on this Mac.
+              </small>
+            )}
+          </label>
+
+          {settings.llm_provider === "ollama" ? (
+            <label className="settings__field">
+              <span>Model</span>
+              <select
+                value={settings.ollama_model}
+                onChange={(e) => patch({ ollama_model: e.target.value })}
+              >
+                {ollamaModels.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : (
+            <>
+              {provider?.needs_key && (
+                <label className="settings__field">
+                  <span>API key</span>
+                  <input
+                    type="password"
+                    autoComplete="off"
+                    placeholder={`${provider.label} API key`}
+                    value={settings.api_keys[settings.llm_provider] ?? ""}
+                    onChange={(e) => {
+                      patch({
+                        api_keys: {
+                          ...settings.api_keys,
+                          [settings.llm_provider]: e.target.value,
+                        },
+                      });
+                      setTestState({ kind: "idle" });
+                    }}
+                  />
+                  {provider.key_url && (
+                    <small>
+                      Stored only on this Mac.{" "}
+                      <a href={provider.key_url} target="_blank" rel="noreferrer">
+                        Get an API key ↗
+                      </a>
+                    </small>
+                  )}
+                </label>
+              )}
+              {provider?.needs_base_url && (
+                <label className="settings__field">
+                  <span>Server URL</span>
+                  <input
+                    type="text"
+                    placeholder="http://localhost:1234/v1"
+                    value={settings.llm_base_url}
+                    onChange={(e) => patch({ llm_base_url: e.target.value })}
+                  />
+                  <small>Any OpenAI-compatible server (LM Studio, llama.cpp, vLLM…).</small>
+                </label>
+              )}
+              <label className="settings__field">
+                <span>Model</span>
+                <input
+                  type="text"
+                  placeholder={provider?.default_model || "model id"}
+                  value={settings.llm_model}
+                  onChange={(e) => patch({ llm_model: e.target.value })}
+                />
+                {provider?.default_model && (
+                  <small>Leave empty for {provider.default_model}.</small>
+                )}
+              </label>
+            </>
+          )}
+
+          <div className="settings__testrow">
+            <button
+              className="settings__secondary"
+              onClick={runTest}
+              disabled={testState.kind === "testing"}
+            >
+              {testState.kind === "testing" ? "Testing…" : "Test connection"}
+            </button>
+            {testState.kind === "ok" && (
+              <small className="settings__test-ok">Connected ✓</small>
+            )}
+            {testState.kind === "fail" && (
+              <small className="settings__error">{testState.message}</small>
+            )}
+          </div>
+        </div>
 
         <label className="settings__field">
           <span>Default audio source</span>

@@ -9,6 +9,7 @@ import ollama
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+import llm
 import meeting_detect
 import model_download
 import search_index
@@ -16,6 +17,7 @@ import settings as settings_module
 import speaker_pack
 from database import close_db, db_path, get_db
 from packages.audio import SystemAudioCapture, default_recordings_dir
+from packages.intelligence import PROVIDERS, LLMUnavailable
 from sessions import manager
 from settings import Settings, get_settings, save_settings
 
@@ -63,6 +65,41 @@ def system_status() -> SystemStatus:
         blackhole_available=blackhole_available,
         whisper_model=get_settings().whisper_model,
     )
+
+
+@router.get("/llm/providers")
+def llm_providers() -> list[dict[str, Any]]:
+    """The provider registry the Settings UI renders."""
+    return [
+        {
+            "id": spec.id,
+            "label": spec.label,
+            "default_model": spec.default_model,
+            "needs_key": spec.needs_key,
+            "needs_base_url": spec.id == "custom",
+            "key_url": spec.key_url,
+            "local": spec.protocol == "ollama" or spec.id == "custom",
+        }
+        for spec in PROVIDERS
+    ]
+
+
+@router.post("/llm/test")
+def llm_test(candidate: Settings) -> dict[str, Any]:
+    """Try one tiny completion with the GIVEN (unsaved) settings.
+
+    Lets the UI validate a key before the user hits Save.
+    """
+    try:
+        client = llm.client_for(candidate)
+        reply = client.complete("Reply with only the word OK.")
+        ok = bool(reply and reply.strip())
+        return {"ok": ok, "reply": (reply or "").strip()[:40]}
+    except LLMUnavailable as exc:
+        return {"ok": False, "error": str(exc)}
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.exception("LLM test failed unexpectedly.")
+        return {"ok": False, "error": str(exc)}
 
 
 @router.get("/system/model-status")
