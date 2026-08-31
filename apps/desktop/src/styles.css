@@ -631,6 +631,17 @@ button svg,
 .summary__regen:hover:not(:disabled) { border-color: var(--accent); color: var(--text-primary); }
 .summary__regen:disabled { opacity: 0.5; cursor: default; }
 
+/* Warns that system audio won't be captured (BlackHole missing). */
+.source-warning {
+  max-width: 420px;
+  margin: 0 auto 10px;
+  text-align: center;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+.source-warning strong { color: var(--text-primary); font-weight: 600; }
+
 /* ===== Control bar (Day 5) ===== */
 .controlbar {
   flex-shrink: 0;

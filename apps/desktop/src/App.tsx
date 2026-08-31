@@ -8,6 +8,8 @@ import {
   getMeetings,
   getMeetingSpeakers,
   getMeetingSummary,
+  getSettings,
+  getSystemStatus,
   meetingAudioUrl,
   renameSpeaker,
   searchSegments,
@@ -19,6 +21,7 @@ import {
   type SearchResult,
   type Speaker,
   type SyncProposal,
+  type SystemStatus,
   type TranscriptSegment,
 } from "./api";
 import { ActionItems } from "./ActionItems";
@@ -84,6 +87,7 @@ const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window
 
 function App() {
   const [source, setSource] = useState<AudioSource>("both");
+  const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
   const {
     status,
     level,
@@ -136,6 +140,22 @@ function App() {
   useEffect(() => {
     if (idle) refreshMeetings();
   }, [idle, refreshMeetings]);
+
+  // On launch, honour the saved default audio source (the record screen used to
+  // ignore it) and learn whether system-audio capture (BlackHole) is available.
+  useEffect(() => {
+    getSettings()
+      .then((s) => setSource(s.default_source))
+      .catch(() => {});
+    getSystemStatus().then(setSystemStatus).catch(() => {});
+  }, []);
+
+  // The user picked a source that needs system audio, but BlackHole isn't set
+  // up — so we'd silently capture only their mic (half of a real meeting).
+  const missingSystemAudio =
+    (source === "both" || source === "system") &&
+    systemStatus !== null &&
+    !systemStatus.blackhole_available;
 
   // Debounced semantic search.
   useEffect(() => {
@@ -644,8 +664,10 @@ function App() {
                 onEditSegment={handleEditSegment}
                 header={
                   <SummaryPanel
+                    meetingId={selectedMeeting.id}
                     summary={pastSummary}
                     processing={selectedMeeting.status === "processing"}
+                    onSummaryUpdated={setPastSummary}
                   />
                 }
               />
@@ -687,6 +709,13 @@ function App() {
               recording={sessionLive}
               speechActive={speechActive}
             />
+
+            {idle && missingSystemAudio && (
+              <p className="source-warning" role="status">
+                You’ll only capture your own microphone. Install{" "}
+                <strong>BlackHole</strong> to record the other participants too.
+              </p>
+            )}
 
             <footer className="controlbar">
               {idle && (
