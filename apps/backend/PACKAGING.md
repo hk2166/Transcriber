@@ -119,3 +119,19 @@ the bundle. First-run model download is the onboarding step (Day 13).
   `allow-dyld-environment-variables`.
 - **Phase 2 / v1.1:** torch features (pyannote diarization) stay out of the
   bundle; ship as an optional download or ONNX port.
+
+## Transcription engines: Whisper + NVIDIA Parakeet (Aug 2026)
+
+Confab ships two ASR families, both **torch-free** and selectable in Settings:
+
+- **Whisper** (default) — faster-whisper / CTranslate2, already bundled.
+- **NVIDIA Parakeet-TDT 0.6B** (v2 English, v3 multilingual) via **onnx-asr** —
+  runs on the **same onnxruntime** we already bundle for VAD + embeddings, so
+  no torch and no new native runtime. Added `collect_all('onnx_asr')` to the
+  spec for its model registry/configs. The int8 model (~670 MB) downloads from
+  Hugging Face on first use, like Whisper's; the model-download banner is
+  engine-aware.
+
+Parakeet tops the Open ASR leaderboard on English and, being a transducer,
+resists the phantom-text hallucinations Whisper produces on near-silence.
+Measured on Apple Silicon (CPU, int8) — see `scripts/bench_engines.py`.

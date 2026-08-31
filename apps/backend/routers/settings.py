@@ -18,6 +18,7 @@ import speaker_pack
 from database import close_db, db_path, get_db
 from packages.audio import SystemAudioCapture, default_recordings_dir
 from packages.intelligence import PROVIDERS, LLMUnavailable
+from packages.transcription import ASR_ENGINES
 from sessions import manager
 from settings import Settings, get_settings, save_settings
 
@@ -102,16 +103,32 @@ def llm_test(candidate: Settings) -> dict[str, Any]:
         return {"ok": False, "error": str(exc)}
 
 
+@router.get("/asr/engines")
+def asr_engines() -> list[dict[str, Any]]:
+    """Transcription-engine registry the Settings UI renders."""
+    return [
+        {
+            "id": spec.id,
+            "label": spec.label,
+            "note": spec.note,
+            "languages": spec.languages,
+            "size_mb": spec.size_mb,
+            "family": spec.family,
+        }
+        for spec in ASR_ENGINES
+    ]
+
+
 @router.get("/system/model-status")
 def model_status() -> dict[str, Any]:
-    """Download state of the configured Whisper model (polled by the UI)."""
-    return model_download.status(get_settings().whisper_model)
+    """Download state of the active engine's model (polled by the UI)."""
+    return model_download.status()
 
 
 @router.post("/system/model-download")
 def model_download_start() -> dict[str, Any]:
-    """Pre-fetch the configured Whisper model with visible progress."""
-    return model_download.start(get_settings().whisper_model)
+    """Pre-fetch the active engine's model with visible progress."""
+    return model_download.start()
 
 
 @router.get("/system/meeting-app")

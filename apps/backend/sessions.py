@@ -26,7 +26,7 @@ from packages.audio import (
     default_recordings_dir,
 )
 from packages.storage import create_meeting, end_meeting, insert_segment
-from packages.transcription import TranscriptSegment, WhisperTranscriber
+from packages.transcription import TranscriptSegment, make_transcriber
 from packages.vad import SileroVAD, SpeechSegment, SpeechSegmenter
 from settings import get_settings
 
@@ -46,21 +46,22 @@ AudioSource = Literal["mic", "system", "both"]
 #: audio only — the recorder tee always receives every block.
 STREAM_QUEUE_MAXSIZE = 256
 
-_transcriber: WhisperTranscriber | None = None
+_transcriber = None
 _transcriber_lock = threading.Lock()
 
 
-def get_transcriber() -> WhisperTranscriber:
+def get_transcriber():
     """
-    Return the process-wide Whisper model, loading it once on first use.
+    Return the process-wide transcriber, loading it once on first use.
 
-    Uses the configured model size (a change takes effect on restart, since the
-    model is loaded once). Blocking — call from a worker thread.
+    Uses the configured engine (Whisper or Parakeet); a change takes effect on
+    restart, since the model is loaded once. Blocking — call from a worker
+    thread.
     """
     global _transcriber
     with _transcriber_lock:
         if _transcriber is None:
-            _transcriber = WhisperTranscriber(model_size=get_settings().whisper_model)
+            _transcriber = make_transcriber(get_settings().transcription_engine)
         return _transcriber
     
 

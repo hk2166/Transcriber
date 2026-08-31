@@ -24,7 +24,9 @@ _cached: Settings | None = None
 
 
 class Settings(BaseModel):
-    whisper_model: str = "small"
+    #: Transcription engine: "whisper-base|small|medium" or "parakeet-v2|v3".
+    transcription_engine: str = "whisper-small"
+    whisper_model: str = "small"  # legacy; superseded by transcription_engine
     ollama_model: str = "llama3.2"
     vad_threshold: float = 0.5
     default_source: str = "both"
@@ -55,7 +57,14 @@ def get_settings() -> Settings:
             path = _path()
             if path.exists():
                 try:
-                    _cached = Settings.model_validate_json(path.read_text())
+                    import json
+
+                    data = json.loads(path.read_text())
+                    # Migrate pre-Parakeet settings: promote the old whisper_model
+                    # choice into the new engine field.
+                    if "transcription_engine" not in data and data.get("whisper_model"):
+                        data["transcription_engine"] = f"whisper-{data['whisper_model']}"
+                    _cached = Settings.model_validate(data)
                 except Exception:
                     logger.exception("Bad settings.json — using defaults.")
                     _cached = Settings()

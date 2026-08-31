@@ -115,6 +115,7 @@ export interface SearchResult {
 }
 
 export interface Settings {
+  transcription_engine: string;
   whisper_model: string;
   ollama_model: string;
   vad_threshold: number;
@@ -125,6 +126,19 @@ export interface Settings {
   llm_model: string;
   llm_base_url: string;
   api_keys: Record<string, string>;
+}
+
+export interface ASREngine {
+  id: string;
+  label: string;
+  note: string;
+  languages: string;
+  size_mb: number;
+  family: "whisper" | "parakeet";
+}
+
+export function getASREngines(): Promise<ASREngine[]> {
+  return getJson<ASREngine[]>("/asr/engines");
 }
 
 export interface LLMProvider {

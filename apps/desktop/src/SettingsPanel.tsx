@@ -3,20 +3,20 @@ import { motion } from "framer-motion";
 
 import { scrim, sheet } from "./motion";
 import {
+  getASREngines,
   getLLMProviders,
   getSettings,
   getSystemStatus,
   putSettings,
   resetAllData,
   testLLM,
+  type ASREngine,
   type AudioSource,
   type LLMProvider,
   type Settings,
   type SystemStatus,
 } from "./api";
 import { IconClose } from "./Icons";
-
-const WHISPER_MODELS = ["base", "small", "medium"];
 const SOURCES: AudioSource[] = ["mic", "system", "both"];
 const AUTO_RECORD_LABELS: Record<Settings["auto_record"], string> = {
   off: "Off",
@@ -34,6 +34,7 @@ export function SettingsPanel({
   const [settings, setSettings] = useState<Settings | null>(null);
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [saving, setSaving] = useState(false);
+  const [engines, setEngines] = useState<ASREngine[]>([]);
   const [providers, setProviders] = useState<LLMProvider[]>([]);
   const [testState, setTestState] = useState<
     { kind: "idle" } | { kind: "testing" } | { kind: "ok" } | { kind: "fail"; message: string }
@@ -43,6 +44,7 @@ export function SettingsPanel({
     getSettings().then(setSettings).catch(() => setSettings(null));
     getSystemStatus().then(setStatus).catch(() => setStatus(null));
     getLLMProviders().then(setProviders).catch(() => setProviders([]));
+    getASREngines().then(setEngines).catch(() => setEngines([]));
   }, []);
 
   // Dismiss on Escape, like a native macOS sheet.
@@ -100,6 +102,7 @@ export function SettingsPanel({
     ? status.ollama_models
     : [settings.ollama_model];
 
+  const engine = engines.find((e) => e.id === settings.transcription_engine);
   const provider = providers.find((p) => p.id === settings.llm_provider);
 
   const runTest = async () => {
@@ -143,18 +146,25 @@ export function SettingsPanel({
         </div>
 
         <label className="settings__field">
-          <span>Transcription model</span>
+          <span>Transcription engine</span>
           <select
-            value={settings.whisper_model}
-            onChange={(e) => patch({ whisper_model: e.target.value })}
+            value={settings.transcription_engine}
+            onChange={(e) => patch({ transcription_engine: e.target.value })}
           >
-            {WHISPER_MODELS.map((m) => (
-              <option key={m} value={m}>
-                {m}
+            {(engines.length
+              ? engines
+              : [{ id: "whisper-small", label: "Whisper · Small" } as ASREngine]
+            ).map((eng) => (
+              <option key={eng.id} value={eng.id}>
+                {eng.label}
               </option>
             ))}
           </select>
-          <small>A change applies after restart.</small>
+          <small>
+            {engine
+              ? `${engine.note} · ${engine.languages === "English" ? "English" : engine.languages + " languages"} · ~${engine.size_mb} MB download. Applies after restart.`
+              : "Applies after restart."}
+          </small>
         </label>
 
         <div className="settings__group">
