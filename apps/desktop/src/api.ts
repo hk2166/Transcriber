@@ -383,6 +383,11 @@ export async function getMeetingSummary(
   }
 }
 
+/** Kick off (re)generating a meeting's summary in the background. */
+export function triggerSummary(id: number): Promise<{ status: string }> {
+  return postJson<{ status: string }>(`/meetings/${id}/summarize`);
+}
+
 export function renameSpeaker(
   speaker_id: number,
   name: string,

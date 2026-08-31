@@ -590,6 +590,46 @@ button svg,
   cursor: pointer;
 }
 .summary__check input { margin-top: 2px; accent-color: var(--accent); }
+.summary--empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+.summary__empty-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.summary__empty-hint {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+.summary__generate {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--bg-elevated);
+  background: var(--accent);
+  border: none;
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.summary__regen {
+  align-self: flex-start;
+  margin-top: 16px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid var(--border);
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.summary__regen:hover:not(:disabled) { border-color: var(--accent); color: var(--text-primary); }
+.summary__regen:disabled { opacity: 0.5; cursor: default; }
 
 /* ===== Control bar (Day 5) ===== */
 .controlbar {
