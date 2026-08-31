@@ -149,6 +149,47 @@ export interface IntegrationInfo {
   enabled: boolean;
 }
 
+// --- Google connect (bring-your-own-credentials) ---
+export interface GoogleSetup {
+  gcloud_available: boolean;
+  script: string;
+  links: { label: string; url: string }[];
+}
+
+export interface GoogleStatus {
+  has_client: boolean;
+  connected: boolean;
+  email: string | null;
+}
+
+export function getGoogleSetup(): Promise<GoogleSetup> {
+  return getJson<GoogleSetup>("/google/setup");
+}
+
+export function getGoogleStatus(): Promise<GoogleStatus> {
+  return getJson<GoogleStatus>("/google/status");
+}
+
+export function saveGoogleCredentials(
+  client_id: string,
+  client_secret: string,
+): Promise<{ saved: boolean }> {
+  return postJson<{ saved: boolean }>("/google/credentials", {
+    client_id,
+    client_secret,
+  });
+}
+
+export function connectGoogle(): Promise<{ auth_url: string }> {
+  return postJson<{ auth_url: string }>("/google/connect", {
+    redirect_base: API_BASE,
+  });
+}
+
+export function disconnectGoogle(): Promise<{ disconnected: boolean }> {
+  return postJson<{ disconnected: boolean }>("/google/disconnect");
+}
+
 export function getIntegrations(): Promise<IntegrationInfo[]> {
   return getJson<IntegrationInfo[]>("/integrations");
 }

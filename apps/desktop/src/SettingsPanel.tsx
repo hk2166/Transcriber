@@ -18,6 +18,7 @@ import {
   type Settings,
   type SystemStatus,
 } from "./api";
+import { GoogleConnect } from "./GoogleConnect";
 import { IconClose } from "./Icons";
 const SOURCES: AudioSource[] = ["mic", "system", "both"];
 const AUTO_RECORD_LABELS: Record<Settings["auto_record"], string> = {
@@ -347,6 +348,8 @@ export function SettingsPanel({
             </label>
           ))}
         </div>
+
+        <GoogleConnect />
 
         <label className="settings__field">
           <span>When a meeting starts (Zoom, Meet, Teams…)</span>

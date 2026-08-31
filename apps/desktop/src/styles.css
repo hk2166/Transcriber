@@ -912,3 +912,33 @@ summary:focus-visible,
   color: var(--on-accent); background: var(--accent);
   border-radius: 999px; text-align: center;
 }
+
+/* ===== Google connect (bring-your-own-credentials) ===== */
+.google__connected { display: flex; align-items: center; gap: 10px; }
+.google__badge {
+  font-size: 12.5px; font-weight: 600; color: var(--ok);
+  padding: 3px 10px; background: color-mix(in srgb, var(--ok) 14%, transparent);
+  border-radius: 999px;
+}
+.google__setup {
+  margin: 4px 0 8px; padding: 12px; display: flex; flex-direction: column; gap: 8px;
+  background: var(--bg-hover); border: 1px solid var(--border); border-radius: var(--radius);
+}
+.google__step { font-size: 12.5px; color: var(--text-secondary); margin: 0; }
+.google__script {
+  font-family: var(--font-mono); font-size: 11.5px; line-height: 1.55;
+  color: var(--text-primary); background: var(--bg-base);
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 10px; overflow-x: auto; white-space: pre; margin: 0;
+}
+.google__link {
+  text-align: left; font-size: 12.5px; color: var(--accent);
+  background: none; border: none; padding: 2px 0; text-decoration: underline;
+}
+.google__actions { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
+.google__connect {
+  padding: 7px 16px; font-size: 13px; font-weight: 600;
+  color: var(--on-accent); background: var(--accent);
+  border: none; border-radius: 8px;
+}
+.google__connect:disabled { opacity: 0.5; }

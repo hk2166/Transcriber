@@ -187,7 +187,23 @@ automation prompt ("Confab wants to control Reminders"). Requires:
 - Apply = `POST /v1/pages` with the summary as blocks (markdown → Notion
   blocks, small local converter; httpx is already a dependency).
 
-### Phase 3 — Google Calendar/Docs, Slack (OAuth — deferred)
+### Phase 3 — Google (front door SHIPPED; apply targets next)
+
+**Built (Aug 2026):** the bring-your-own-credentials connection — the only
+approach that adds Google without app verification or contradicting
+"local by default". `packages/integrations/google_oauth.py` (PKCE + loopback,
+pure/tested), `google_service.py` (Keychain via the `security` CLI, with a
+chmod-600 fallback; connect/callback orchestration; gcloud setup-script +
+console deep-link generator), `routers/google.py` (`/google/setup|status|
+credentials|connect|callback|disconnect` — the callback is a route on the
+sidecar's own loopback server, state-validated, loopback-only), and the
+`GoogleConnect` Settings wizard. Verified live except the real Google consent
+round-trip (needs a real account + the user's own OAuth client). **Still to
+build:** `GoogleCalendar` / `GoogleDocs` *apply* targets (events.insert /
+Docs create via `drive.file`) — trivial on the existing Integration protocol
+now that auth + tokens exist.
+
+### Phase 3 (original design) — Google Calendar/Docs, Slack (OAuth)
 
 Full OAuth2 desktop flow: loopback `http://127.0.0.1:<port>/callback`, browser
 consent, token + refresh storage. Real, well-understood work — but heavy, and
