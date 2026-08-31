@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, MotionConfig } from "framer-motion";
 
 import {
+  getMeetingApp,
   getMeetingProposals,
   getMeetingSegments,
   getMeetings,
@@ -13,6 +14,7 @@ import {
   updateSegmentText,
   type AudioSource,
   type Meeting,
+  type MeetingApp,
   type MeetingSummary,
   type SearchResult,
   type Speaker,
@@ -274,6 +276,87 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [start, source]);
 
+  // --- Meeting detection: poll while idle (any view), surface + prompt/auto.
+  const [meetingApp, setMeetingApp] = useState<MeetingApp | null>(null);
+  const [dismissedSince, setDismissedSince] = useState<number | null>(null);
+  const alertedRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!idle) {
+      setMeetingApp(null);
+      return;
+    }
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const detected = await getMeetingApp();
+        if (!cancelled) setMeetingApp(detected);
+      } catch {
+        // Backend unreachable — the connection dot already reports that.
+      }
+    };
+    tick();
+    const id = window.setInterval(tick, 5000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [idle]);
+
+  useEffect(() => {
+    const info = meetingApp;
+    if (
+      !idle ||
+      !info?.app ||
+      info.recording ||
+      info.mode === "off" ||
+      info.since == null ||
+      alertedRef.current === info.since
+    ) {
+      return;
+    }
+    alertedRef.current = info.since;
+    const what =
+      info.source === "microphone" ? "A meeting" : `${info.app} call`;
+
+    if (info.mode === "auto") {
+      toast(`Recording started — ${what.toLowerCase()} detected.`);
+      startFromDetect();
+      if (isTauri) {
+        import("@tauri-apps/api/core")
+          .then(({ invoke }) =>
+            invoke("meeting_alert", {
+              title: "Confab is recording",
+              body: `${what} detected — recording started automatically.`,
+              focus: false,
+            }),
+          )
+          .catch(() => {});
+      }
+      return;
+    }
+    // Prompt mode: pop the window (even from the tray) + native notification.
+    if (isTauri) {
+      import("@tauri-apps/api/core")
+        .then(({ invoke }) =>
+          invoke("meeting_alert", {
+            title: `${what} detected`,
+            body: "Confab is ready to record it — one click to start.",
+            focus: true,
+          }),
+        )
+        .catch(() => {});
+    }
+  }, [meetingApp, idle, startFromDetect]);
+
+  const showDetectBanner =
+    idle &&
+    meetingApp?.app != null &&
+    !meetingApp.recording &&
+    meetingApp.mode === "prompt" &&
+    meetingApp.since != null &&
+    dismissedSince !== meetingApp.since;
+
   // --- Tauri shell glue (tray + global hotkey) — no-ops in the dev browser.
   const toggleRef = useRef(handleToggle);
   useEffect(() => {
@@ -409,6 +492,13 @@ function App() {
       <Toasts />
 
       <main className="main">
+        {showDetectBanner && meetingApp && (
+          <DetectBanner
+            info={meetingApp}
+            onRecord={startFromDetect}
+            onDismiss={() => setDismissedSince(meetingApp.since)}
+          />
+        )}
         {/* Keyed remount runs the enter animation on every view change —
             simpler and more robust than a wait-mode exit handoff. */}
         <motion.div
@@ -591,7 +681,6 @@ function App() {
             </header>
 
             <ModelBanner />
-            <DetectBanner active={idle} onRecord={startFromDetect} />
 
             <LiveTranscript
               segments={transcripts}

@@ -25,10 +25,28 @@ fn set_recording(app: AppHandle, recording: bool) {
     }
 }
 
+/// A meeting was detected: bring Confab forward (even from the tray) and post
+/// a native notification, so the prompt is seen no matter where the user is.
+#[tauri::command]
+fn meeting_alert(app: AppHandle, title: String, body: String, focus: bool) {
+    use tauri_plugin_notification::NotificationExt;
+
+    if focus {
+        show_main_window(&app);
+    }
+    let _ = app
+        .notification()
+        .builder()
+        .title(title)
+        .body(body)
+        .show();
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, _shortcut, event| {
@@ -38,7 +56,7 @@ pub fn run() {
                 })
                 .build(),
         )
-        .invoke_handler(tauri::generate_handler![set_recording])
+        .invoke_handler(tauri::generate_handler![set_recording, meeting_alert])
         .on_window_event(|window, event| {
             // macOS convention: closing the window keeps the app (and any
             // recording) alive in the tray; Cmd-Q / tray Quit really quits.

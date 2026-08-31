@@ -349,7 +349,7 @@ export function SettingsPanel({
         </div>
 
         <label className="settings__field">
-          <span>When a Zoom/Webex call starts</span>
+          <span>When a meeting starts (Zoom, Meet, Teams…)</span>
           <select
             value={settings.auto_record}
             onChange={(e) =>

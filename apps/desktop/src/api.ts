@@ -420,6 +420,7 @@ export function startModelDownload(): Promise<ModelStatus> {
 export interface MeetingApp {
   app: string | null;
   since: number | null;
+  source: "app" | "microphone" | null;
   recording: boolean;
   mode: "off" | "prompt" | "auto";
 }
