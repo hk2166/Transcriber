@@ -25,6 +25,14 @@ fn set_recording(app: AppHandle, recording: bool) {
     }
 }
 
+/// Fully restart Confab — kills the app (and its backend sidecar, via the
+/// RunEvent::Exit → process-group kill) and relaunches. Used after switching
+/// transcription engine, so the new model loads in a clean process.
+#[tauri::command]
+fn restart_app(app: AppHandle) {
+    app.restart();
+}
+
 /// A meeting was detected: bring Confab forward (even from the tray) and post
 /// a native notification, so the prompt is seen no matter where the user is.
 #[tauri::command]
@@ -56,7 +64,11 @@ pub fn run() {
                 })
                 .build(),
         )
-        .invoke_handler(tauri::generate_handler![set_recording, meeting_alert])
+        .invoke_handler(tauri::generate_handler![
+            set_recording,
+            meeting_alert,
+            restart_app
+        ])
         .on_window_event(|window, event| {
             // macOS convention: closing the window keeps the app (and any
             // recording) alive in the tray; Cmd-Q / tray Quit really quits.

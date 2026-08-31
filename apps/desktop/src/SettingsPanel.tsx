@@ -3,7 +3,6 @@ import { motion } from "framer-motion";
 
 import { scrim, sheet } from "./motion";
 import {
-  getASREngines,
   getIntegrations,
   getLLMProviders,
   getSettings,
@@ -11,13 +10,13 @@ import {
   putSettings,
   resetAllData,
   testLLM,
-  type ASREngine,
   type AudioSource,
   type IntegrationInfo,
   type LLMProvider,
   type Settings,
   type SystemStatus,
 } from "./api";
+import { EngineSelector } from "./EngineSelector";
 import { GoogleConnect } from "./GoogleConnect";
 import { IconClose } from "./Icons";
 const SOURCES: AudioSource[] = ["mic", "system", "both"];
@@ -37,7 +36,6 @@ export function SettingsPanel({
   const [settings, setSettings] = useState<Settings | null>(null);
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [saving, setSaving] = useState(false);
-  const [engines, setEngines] = useState<ASREngine[]>([]);
   const [providers, setProviders] = useState<LLMProvider[]>([]);
   const [integrations, setIntegrations] = useState<IntegrationInfo[]>([]);
   const [testState, setTestState] = useState<
@@ -48,7 +46,6 @@ export function SettingsPanel({
     getSettings().then(setSettings).catch(() => setSettings(null));
     getSystemStatus().then(setStatus).catch(() => setStatus(null));
     getLLMProviders().then(setProviders).catch(() => setProviders([]));
-    getASREngines().then(setEngines).catch(() => setEngines([]));
     getIntegrations().then(setIntegrations).catch(() => setIntegrations([]));
   }, []);
 
@@ -107,7 +104,6 @@ export function SettingsPanel({
     ? status.ollama_models
     : [settings.ollama_model];
 
-  const engine = engines.find((e) => e.id === settings.transcription_engine);
   const provider = providers.find((p) => p.id === settings.llm_provider);
 
   const runTest = async () => {
@@ -150,27 +146,10 @@ export function SettingsPanel({
           <Status ok={status?.blackhole_available} label="BlackHole (system audio)" />
         </div>
 
-        <label className="settings__field">
+        <div className="settings__field">
           <span>Transcription engine</span>
-          <select
-            value={settings.transcription_engine}
-            onChange={(e) => patch({ transcription_engine: e.target.value })}
-          >
-            {(engines.length
-              ? engines
-              : [{ id: "whisper-small", label: "Whisper · Small" } as ASREngine]
-            ).map((eng) => (
-              <option key={eng.id} value={eng.id}>
-                {eng.label}
-              </option>
-            ))}
-          </select>
-          <small>
-            {engine
-              ? `${engine.note} · ${engine.languages === "English" ? "English" : engine.languages + " languages"} · ~${engine.size_mb} MB download. Applies after restart.`
-              : "Applies after restart."}
-          </small>
-        </label>
+          <EngineSelector />
+        </div>
 
         <div className="settings__group">
           <label className="settings__field">

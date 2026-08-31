@@ -34,7 +34,16 @@ def read_settings() -> Settings:
 
 @router.put("/settings")
 def update_settings(new: Settings) -> Settings:
-    return save_settings(new)
+    engine_changed = new.transcription_engine != get_settings().transcription_engine
+    saved = save_settings(new)
+    if engine_changed:
+        # Drop the cached transcriber so the new engine loads next recording
+        # (the packaged app also hard-restarts; this covers dev + correctness).
+        import sessions
+
+        sessions.reset_transcriber()
+        logger.info("Transcription engine → %s (transcriber reset).", new.transcription_engine)
+    return saved
 
 
 class SystemStatus(BaseModel):
@@ -105,7 +114,9 @@ def llm_test(candidate: Settings) -> dict[str, Any]:
 
 @router.get("/asr/engines")
 def asr_engines() -> list[dict[str, Any]]:
-    """Transcription-engine registry the Settings UI renders."""
+    """Transcription-engine registry the Settings UI renders — with per-engine
+    download state and which one is active."""
+    active = get_settings().transcription_engine
     return [
         {
             "id": spec.id,
@@ -114,21 +125,23 @@ def asr_engines() -> list[dict[str, Any]]:
             "languages": spec.languages,
             "size_mb": spec.size_mb,
             "family": spec.family,
+            "downloaded": model_download.is_downloaded(spec.id),
+            "active": spec.id == active,
         }
         for spec in ASR_ENGINES
     ]
 
 
 @router.get("/system/model-status")
-def model_status() -> dict[str, Any]:
-    """Download state of the active engine's model (polled by the UI)."""
-    return model_download.status()
+def model_status(engine: str | None = None) -> dict[str, Any]:
+    """Download state of an engine's model (active if unspecified)."""
+    return model_download.status(engine)
 
 
 @router.post("/system/model-download")
-def model_download_start() -> dict[str, Any]:
-    """Pre-fetch the active engine's model with visible progress."""
-    return model_download.start()
+def model_download_start(engine: str | None = None) -> dict[str, Any]:
+    """Pre-fetch an engine's model with visible progress (active if unspecified)."""
+    return model_download.start(engine)
 
 
 @router.get("/system/meeting-app")

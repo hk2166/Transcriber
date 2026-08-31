@@ -220,6 +220,8 @@ export interface ASREngine {
   languages: string;
   size_mb: number;
   family: "whisper" | "parakeet";
+  downloaded: boolean;
+  active: boolean;
 }
 
 export function getASREngines(): Promise<ASREngine[]> {
@@ -450,12 +452,14 @@ export interface ModelStatus {
   error: string | null;
 }
 
-export function getModelStatus(): Promise<ModelStatus> {
-  return getJson<ModelStatus>("/system/model-status");
+export function getModelStatus(engine?: string): Promise<ModelStatus> {
+  const q = engine ? `?engine=${encodeURIComponent(engine)}` : "";
+  return getJson<ModelStatus>(`/system/model-status${q}`);
 }
 
-export function startModelDownload(): Promise<ModelStatus> {
-  return postJson<ModelStatus>("/system/model-download");
+export function startModelDownload(engine?: string): Promise<ModelStatus> {
+  const q = engine ? `?engine=${encodeURIComponent(engine)}` : "";
+  return postJson<ModelStatus>(`/system/model-download${q}`);
 }
 
 export interface MeetingApp {

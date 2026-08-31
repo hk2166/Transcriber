@@ -38,14 +38,24 @@ _state: dict[str, Any] = {
 }
 
 
-def _active() -> tuple[str, str, str, int]:
-    """(engine, repo, family, expected_bytes) for the configured engine."""
-    engine = get_settings().transcription_engine
+def _resolve(engine: str) -> tuple[str, str, str, int]:
+    """(engine, repo, family, expected_bytes) for any engine id."""
     if engine in _PARAKEET:
         repo, expected = _PARAKEET[engine]
         return engine, repo, "parakeet", expected
     size = engine.split("-", 1)[1] if engine.startswith("whisper-") else "small"
     return engine, f"Systran/faster-whisper-{size}", "whisper", 0
+
+
+def _active() -> tuple[str, str, str, int]:
+    """Resolve the currently-configured engine."""
+    return _resolve(get_settings().transcription_engine)
+
+
+def is_downloaded(engine: str) -> bool:
+    """Whether ``engine``'s model is already in the local cache."""
+    _, repo, family, _ = _resolve(engine)
+    return _is_cached(repo, family)
 
 
 def _repo_cache_dir(repo: str) -> Path:
@@ -95,9 +105,9 @@ def _blank(engine: str, state: str, progress: float = 0.0) -> dict[str, Any]:
     }
 
 
-def status() -> dict[str, Any]:
-    """Download state of the active engine's model (UI polls this)."""
-    engine, repo, family, _ = _active()
+def status(engine: str | None = None) -> dict[str, Any]:
+    """Download state of an engine's model (active engine if unspecified)."""
+    engine, repo, family, _ = _resolve(engine) if engine else _active()
     with _lock:
         if _state["state"] == "downloading" and _state["model"] == engine:
             return dict(_state)
@@ -109,14 +119,15 @@ def status() -> dict[str, Any]:
     return _blank(engine, "absent")
 
 
-def start() -> dict[str, Any]:
-    """Begin downloading the active engine's model (no-op if running/cached)."""
+def start(engine: str | None = None) -> dict[str, Any]:
+    """Begin downloading an engine's model (active if unspecified; no-op if
+    another download is running or this one is already cached)."""
     with _lock:
         if _state["state"] == "downloading":
             return dict(_state)
-    if status()["state"] == "ready":
-        return status()
-    engine, repo, family, expected = _active()
+    if status(engine)["state"] == "ready":
+        return status(engine)
+    engine, repo, family, expected = _resolve(engine) if engine else _active()
     with _lock:
         _state.update(
             state="downloading",

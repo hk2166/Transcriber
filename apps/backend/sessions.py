@@ -54,15 +54,24 @@ def get_transcriber():
     """
     Return the process-wide transcriber, loading it once on first use.
 
-    Uses the configured engine (Whisper or Parakeet); a change takes effect on
-    restart, since the model is loaded once. Blocking — call from a worker
-    thread.
+    Uses the configured engine (Whisper or Parakeet). Switching engines calls
+    :func:`reset_transcriber`, so the new engine loads on the next recording —
+    no process restart needed. Blocking — call from a worker thread.
     """
     global _transcriber
     with _transcriber_lock:
         if _transcriber is None:
             _transcriber = make_transcriber(get_settings().transcription_engine)
         return _transcriber
+
+
+def reset_transcriber() -> None:
+    """Drop the cached transcriber so the next recording reloads the configured
+    engine. Safe mid-session: an active worker keeps its own reference; only the
+    *next* ``get_transcriber`` is affected."""
+    global _transcriber
+    with _transcriber_lock:
+        _transcriber = None
     
 
 
