@@ -20,6 +20,12 @@ import { EngineSelector } from "./EngineSelector";
 import { GoogleConnect } from "./GoogleConnect";
 import { IconClose } from "./Icons";
 const SOURCES: AudioSource[] = ["mic", "system", "both"];
+const REFINE_MODELS = [
+  { id: "base", label: "Faster (Whisper Base)" },
+  { id: "small", label: "Balanced (Whisper Small)" },
+  { id: "medium", label: "Accurate (Whisper Medium)" },
+  { id: "large-v3", label: "Best (Whisper Large v3)" },
+];
 const AUTO_RECORD_LABELS: Record<Settings["auto_record"], string> = {
   off: "Off",
   prompt: "Ask me",
@@ -300,6 +306,37 @@ export function SettingsPanel({
           />
           <span>Summarise meetings automatically</span>
         </label>
+
+        <div className="settings__field">
+          <label className="settings__toggle">
+            <input
+              type="checkbox"
+              checked={settings.refine_transcript}
+              onChange={(e) => patch({ refine_transcript: e.target.checked })}
+            />
+            <span>Refine transcript after each meeting</span>
+          </label>
+          <small>
+            The live transcript is fast but rough. When a meeting ends, Confab
+            re-transcribes the whole recording for cleaner text and punctuation,
+            then labels the speakers — replacing the live version.
+          </small>
+          {settings.refine_transcript && (
+            <label className="settings__field settings__subfield">
+              <span>Refine accuracy</span>
+              <select
+                value={settings.refine_model}
+                onChange={(e) => patch({ refine_model: e.target.value })}
+              >
+                {REFINE_MODELS.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+        </div>
 
         <div className="settings__field">
           <span>Sync suggestions</span>

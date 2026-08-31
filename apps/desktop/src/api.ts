@@ -121,6 +121,8 @@ export interface Settings {
   vad_threshold: number;
   default_source: AudioSource;
   auto_summarize: boolean;
+  refine_transcript: boolean;
+  refine_model: string;
   auto_record: "off" | "prompt" | "auto";
   integrations_enabled: Record<string, boolean>;
   llm_provider: string;

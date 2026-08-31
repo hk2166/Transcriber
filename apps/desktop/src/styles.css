@@ -460,6 +460,7 @@ button svg,
 .settings__check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-primary); }
 .settings__check-state { margin-left: auto; font-size: 12px; color: var(--text-tertiary); }
 .settings__field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 16px; }
+.settings__subfield { margin: 8px 0 0; padding-left: 26px; }
 .settings__field > span { font-size: 13px; font-weight: 500; }
 .settings__field small { font-size: 11px; color: var(--text-tertiary); }
 .settings__field select, .settings__field input[type="range"] { font-family: inherit; }

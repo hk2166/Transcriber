@@ -91,6 +91,38 @@ class WhisperTranscriber:
             language or "auto",
         )
 
+    def transcribe_file(self, path: str) -> list[TranscriptSegment]:
+        """Re-transcribe a whole recording for the post-meeting refine pass.
+
+        Unlike the live path (independent VAD clips, greedy decoding, no
+        cross-segment conditioning), this feeds the *entire* audio at once with
+        beam search, cross-segment context, and faster-whisper's own VAD — so
+        punctuation, casing, and boundary words come out markedly better. Slow;
+        run in a worker thread post-meeting.
+        """
+        segments, info = self.model.transcribe(
+            path,
+            language=self.language,
+            beam_size=max(self.beam_size, 5),
+            condition_on_previous_text=True,
+            vad_filter=True,
+        )
+        out: list[TranscriptSegment] = []
+        for s in segments:
+            text = s.text.strip()
+            if not text or s.no_speech_prob >= self.no_speech_threshold:
+                continue
+            out.append(
+                TranscriptSegment(
+                    text=text,
+                    start_ms=int(s.start * 1000),
+                    end_ms=int(s.end * 1000),
+                    language=info.language,
+                    confidence=min(1.0, float(np.exp(s.avg_logprob))),
+                )
+            )
+        return out
+
     def transcribe(
         self, audio: np.ndarray, start_ms: int = 0
     ) -> TranscriptSegment | None:

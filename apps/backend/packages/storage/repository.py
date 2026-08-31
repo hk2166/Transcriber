@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -196,6 +197,34 @@ def insert_segment(
     )
     conn.commit()
     return int(cursor.lastrowid)
+
+
+def replace_segments(
+    conn: sqlite3.Connection, meeting_id: int, segments: Sequence
+) -> int:
+    """Swap a meeting's transcript for a freshly re-transcribed one, atomically.
+
+    Used by the post-meeting refine pass. Each item needs ``text``, ``start_ms``,
+    ``end_ms``, ``language``, ``confidence`` (e.g. a
+    :class:`~packages.transcription.TranscriptSegment`). The delete and inserts
+    run in one transaction, so a failure never leaves the meeting empty. Speaker
+    attributions are dropped — the new segments start unattributed and
+    diarization re-runs over them. Returns the number of segments written.
+    """
+    with conn:  # BEGIN … COMMIT (or ROLLBACK on error)
+        conn.execute(
+            "DELETE FROM transcript_segments WHERE meeting_id = ?", (meeting_id,)
+        )
+        conn.executemany(
+            "INSERT INTO transcript_segments "
+            "(meeting_id, speaker_id, text, start_ms, end_ms, language, confidence) "
+            "VALUES (?, NULL, ?, ?, ?, ?, ?)",
+            [
+                (meeting_id, s.text, s.start_ms, s.end_ms, s.language, s.confidence)
+                for s in segments
+            ],
+        )
+    return len(segments)
 
 
 def get_meetings(conn: sqlite3.Connection) -> list[Meeting]:

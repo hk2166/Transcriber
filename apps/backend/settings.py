@@ -31,6 +31,14 @@ class Settings(BaseModel):
     vad_threshold: float = 0.5
     default_source: str = "both"
     auto_summarize: bool = True
+    #: After a meeting ends, re-transcribe the whole recording for a cleaner,
+    #: better-punctuated transcript that then gets diarized (the live transcript
+    #: shows during the meeting; this supersedes it once processing finishes).
+    refine_transcript: bool = True
+    #: Whisper model size for that refine pass ("base|small|medium|large-v3").
+    #: Bigger = more accurate but slower; the big win is full-file context +
+    #: beam search even at the same size as the live engine.
+    refine_model: str = "small"
     #: What to do when a meeting app (Zoom/Webex) starts a call:
     #: "off" = ignore, "prompt" = offer to record, "auto" = start recording.
     auto_record: Literal["off", "prompt", "auto"] = "prompt"

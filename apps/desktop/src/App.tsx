@@ -456,7 +456,7 @@ function App() {
                 <span className="meeting-item__title">{meeting.title}</span>
                 <span className="meeting-item__meta">
                   {meeting.status === "processing"
-                    ? "Finding speakers…"
+                    ? "Refining transcript…"
                     : `${meeting.segment_count} segment${meeting.segment_count === 1 ? "" : "s"}`}
                 </span>
               </button>
@@ -557,7 +557,7 @@ function App() {
                 <h2>{selectedMeeting.title}</h2>
                 <p className="topbar__sub">
                   {selectedMeeting.status === "processing"
-                    ? "Finding speakers…"
+                    ? "Refining transcript…"
                     : `${selectedMeeting.segment_count} segments · ${SOURCE_LABEL[selectedMeeting.source]}`}
                 </p>
               </div>

@@ -10,7 +10,7 @@ export function SummaryPanel({ summary, processing }: SummaryPanelProps) {
     return (
       <div className="summary summary--pending">
         <span className="transcript__pulse" />
-        Finding speakers and summarising…
+        Refining transcript, finding speakers, and summarising…
       </div>
     );
   }

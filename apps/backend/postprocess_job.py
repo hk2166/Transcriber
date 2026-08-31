@@ -24,6 +24,7 @@ from packages.storage import (
     get_segments,
     get_speakers,
     replace_action_items,
+    replace_segments,
     save_summary,
     set_meeting_status,
     set_meeting_title,
@@ -35,6 +36,9 @@ logger = logging.getLogger(__name__)
 
 _diarizer: SpeakerDiarizer | None = None
 _diarizer_lock = threading.Lock()
+_refine_transcriber = None  # WhisperTranscriber, loaded on first refine
+_refine_model_size: str | None = None
+_refine_lock = threading.Lock()
 _tasks: set[asyncio.Task] = set()
 
 
@@ -59,6 +63,54 @@ async def _diarization_turns(wav_path: str) -> list:
             logger.info("In-process diarization unavailable — using the speaker pack.")
             return await asyncio.to_thread(speaker_pack.diarize_file, wav_path)
         raise
+
+
+def _get_refine_transcriber(model_size: str):
+    """A Whisper model dedicated to the refine pass, cached and rebuilt only
+    when the configured refine model changes. Kept separate from the live
+    transcriber so the two can be different sizes (fast live, accurate refine)."""
+    from packages.transcription import WhisperTranscriber
+
+    global _refine_transcriber, _refine_model_size
+    with _refine_lock:
+        if _refine_transcriber is None or _refine_model_size != model_size:
+            _refine_transcriber = WhisperTranscriber(model_size=model_size)
+            _refine_model_size = model_size
+    return _refine_transcriber
+
+
+async def _refine(meeting_id: int, wav_path: str) -> bool:
+    """Re-transcribe the whole recording and replace the live segments.
+
+    The live path emits rough, VAD-chopped, greedily-decoded text for instant
+    feedback; here we run the full audio through beam search with cross-segment
+    context for a markedly cleaner transcript. Best-effort: on any failure the
+    live segments are left untouched. Returns whether segments were replaced.
+    """
+    import os
+
+    if not wav_path or not os.path.exists(wav_path):
+        logger.warning("No recording for meeting %d — skipping refine.", meeting_id)
+        return False
+    settings = get_settings()
+    transcriber = await asyncio.to_thread(
+        _get_refine_transcriber, settings.refine_model
+    )
+    segments = await asyncio.to_thread(transcriber.transcribe_file, wav_path)
+    if not segments:
+        logger.warning(
+            "Refine produced no segments for meeting %d — keeping live transcript.",
+            meeting_id,
+        )
+        return False
+    count = replace_segments(get_db(), meeting_id, segments)
+    logger.info(
+        "Refined meeting %d: %d segments (whisper-%s).",
+        meeting_id,
+        count,
+        settings.refine_model,
+    )
+    return True
 
 
 async def _diarize(meeting_id: int, wav_path: str, segments: list[Segment]) -> None:
@@ -116,6 +168,15 @@ async def run_postprocess(meeting_id: int, wav_path: str) -> None:
     if not segments:
         set_meeting_status(db, meeting_id, "ready")
         return
+
+    # Re-transcribe the whole recording for a cleaner transcript, then diarize
+    # the *refined* text. Runs first so everything downstream builds on it.
+    if get_settings().refine_transcript:
+        try:
+            if await _refine(meeting_id, wav_path):
+                segments = get_segments(db, meeting_id)
+        except Exception:
+            logger.exception("Transcript refine failed for meeting %d.", meeting_id)
 
     try:
         await _diarize(meeting_id, wav_path, segments)

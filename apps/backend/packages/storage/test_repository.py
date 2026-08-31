@@ -17,11 +17,23 @@ from packages.storage import (
     get_summary,
     insert_segment,
     rename_speaker,
+    replace_segments,
     save_summary,
     set_meeting_status,
     set_meeting_title,
     set_segment_speaker,
 )
+
+
+class _Seg:
+    """Minimal stand-in for a TranscriptSegment (duck-typed by replace_segments)."""
+
+    def __init__(self, text, start_ms, end_ms, language="en", confidence=0.95):
+        self.text = text
+        self.start_ms = start_ms
+        self.end_ms = end_ms
+        self.language = language
+        self.confidence = confidence
 
 
 @pytest.fixture
@@ -69,6 +81,48 @@ def test_insert_and_get_segments_in_time_order(conn):
     assert [s.text for s in segments] == ["first", "second"]
     assert segments[0].start_ms == 1000
     assert segments[0].confidence == 0.8
+
+
+def test_replace_segments_swaps_the_whole_transcript(conn):
+    meeting_id = _new_meeting(conn)
+    insert_segment(conn, meeting_id, text="rough one", start_ms=0, end_ms=900,
+                   language="en", confidence=0.4)
+    insert_segment(conn, meeting_id, text="rough two", start_ms=1000, end_ms=1800,
+                   language="en", confidence=0.4)
+
+    count = replace_segments(conn, meeting_id, [
+        _Seg("Refined one.", 0, 950),
+        _Seg("Refined two.", 1000, 1850),
+        _Seg("Refined three.", 2000, 2600),
+    ])
+
+    assert count == 3
+    segments = get_segments(conn, meeting_id)
+    assert [s.text for s in segments] == ["Refined one.", "Refined two.", "Refined three."]
+    # Fresh segments start unattributed — diarization re-runs after the refine.
+    assert all(s.speaker_id is None for s in segments)
+
+
+def test_replace_segments_is_atomic_on_bad_input(conn):
+    meeting_id = _new_meeting(conn)
+    insert_segment(conn, meeting_id, text="keep me", start_ms=0, end_ms=900,
+                   language="en", confidence=0.9)
+
+    class _Broken:
+        text = "boom"
+        start_ms = 0
+        end_ms = 100
+        language = "en"
+
+        @property
+        def confidence(self):  # blows up mid-insert
+            raise ValueError("no confidence")
+
+    with pytest.raises(ValueError):
+        replace_segments(conn, meeting_id, [_Seg("Refined.", 0, 900), _Broken()])
+
+    # The transaction rolled back — the original transcript survives intact.
+    assert [s.text for s in get_segments(conn, meeting_id)] == ["keep me"]
 
 
 def test_segment_count_reported(conn):
