@@ -54,12 +54,23 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     import asyncio
     from contextlib import suppress
 
+    import postprocess_job
+    from sessions import manager
+
     get_db()  # open + migrate before serving
+    # Recover any meeting a previous crash / force-quit left stuck before serving.
+    postprocess_job.reconcile_interrupted_meetings()
     detect_task = asyncio.create_task(meeting_detect.poller())
     yield
     detect_task.cancel()
     with suppress(asyncio.CancelledError):
         await detect_task
+    # Quitting mid-recording (Cmd-Q) lands here: flush the WAV and mark the
+    # meeting so the next launch's reconciliation finishes it — never lose it.
+    try:
+        manager.finalize_for_shutdown()
+    except Exception:
+        logger.exception("Error finalizing the active session on shutdown.")
     close_db()
 
 

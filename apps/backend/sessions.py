@@ -393,6 +393,37 @@ class SessionManager:
             raise SessionNotFound(f"No active session with id {session_id!r}.")
         return self._active
 
+    def finalize_for_shutdown(self) -> None:
+        """Fast, best-effort finalize of the active session when the app is
+        quitting (Cmd-Q → SIGTERM).
+
+        Flushes the WAV header and marks the meeting ``processing`` so the next
+        launch's reconciliation completes it — deliberately WITHOUT the 30 s
+        worker drain (the host escalates to SIGKILL shortly after SIGTERM) or
+        scheduling post-processing (the event loop is closing). Quitting instead
+        of pressing Stop must never strand a recording; boot reconciliation then
+        turns this ``processing`` row into a finished meeting.
+        """
+        session, self._active = self._active, None
+        if session is None:
+            return
+        try:
+            session.stop()  # stops capture + closes the WAV (valid header)
+        except Exception:
+            logger.exception(
+                "Error stopping session %s on shutdown.", session.session_id
+            )
+        if session.meeting_id is not None:
+            end_meeting(
+                get_db(),
+                session.meeting_id,
+                ended_at=datetime.now(),
+                status="processing",
+            )
+        logger.info(
+            "Finalized session %s for shutdown → processing.", session.session_id
+        )
+
 
 #: Process-wide registry — the app has exactly one.
 manager = SessionManager()

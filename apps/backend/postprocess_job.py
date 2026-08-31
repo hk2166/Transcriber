@@ -21,6 +21,7 @@ from packages.intelligence import (
 from packages.storage import (
     Segment,
     create_speakers,
+    get_meetings,
     get_segments,
     get_speakers,
     replace_action_items,
@@ -235,6 +236,33 @@ async def run_summary(meeting_id: int) -> None:
 def _track(task: asyncio.Task) -> None:
     _tasks.add(task)
     task.add_done_callback(_tasks.discard)
+
+
+def reconcile_interrupted_meetings() -> None:
+    """Recover meetings a crash or force-quit left stuck in ``recording`` /
+    ``processing``. Runs once at startup.
+
+    Without this, a meeting interrupted before it reached ``ready`` hangs in that
+    status forever with no path back. Here each stranded meeting is brought to a
+    usable terminal state: if a recording with captured segments survives, re-run
+    post-processing to finish it properly (refine → diarize → summarize); if
+    there's nothing recoverable, mark it ``ready`` so it at least stops hanging.
+    """
+    import os
+
+    db = get_db()
+    stuck = [m for m in get_meetings(db) if m.status in ("recording", "processing")]
+    if not stuck:
+        return
+    logger.info("Reconciling %d interrupted meeting(s) from a previous run.", len(stuck))
+    for m in stuck:
+        if m.wav_path and os.path.exists(m.wav_path) and m.segment_count > 0:
+            set_meeting_status(db, m.id, "processing")
+            schedule(m.id, m.wav_path)  # refine → diarize → summarize → ready
+            logger.info("Meeting %d: resuming post-processing.", m.id)
+        else:
+            set_meeting_status(db, m.id, "ready")  # nothing to finish — unhang it
+            logger.info("Meeting %d: no recoverable audio — marked ready.", m.id)
 
 
 def schedule(meeting_id: int, wav_path: str) -> None:

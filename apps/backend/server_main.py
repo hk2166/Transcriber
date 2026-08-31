@@ -39,7 +39,17 @@ def main() -> None:
     port = _free_port()
     # Handshake line the Tauri host greps for on the sidecar's stdout.
     print(f"CONFAB_PORT={port}", flush=True)
-    uvicorn.run(app, host="127.0.0.1", port=port, log_level="info")
+    # Bound the graceful-shutdown wait so an open recording WebSocket can't stall
+    # SIGTERM: uvicorn force-closes lingering connections after this and then runs
+    # the lifespan shutdown (which finalizes an in-progress recording) — all well
+    # inside the host's SIGTERM→SIGKILL window.
+    uvicorn.run(
+        app,
+        host="127.0.0.1",
+        port=port,
+        log_level="info",
+        timeout_graceful_shutdown=3,
+    )
 
 
 if __name__ == "__main__":

@@ -96,12 +96,18 @@ pub fn spawn(resource_dir: &Path, log_dir: &Path) -> Result<(Backend, u16), Stri
 impl Backend {
     /// SIGTERM the whole process group (uvicorn shuts down gracefully),
     /// escalating to SIGKILL if it lingers.
+    ///
+    /// The window is generous enough for uvicorn's bounded graceful shutdown to
+    /// run the lifespan hook that finalizes an in-progress recording (so a
+    /// Cmd-Q mid-meeting keeps a valid WAV), yet still guarantees the sidecar
+    /// dies. An idle backend exits near-instantly; only a live recording uses
+    /// the extra time.
     pub fn shutdown(&self) {
         let Some(mut child) = self.child.lock().unwrap().take() else {
             return;
         };
         unsafe { libc::kill(-self.pgid, libc::SIGTERM) };
-        let deadline = Instant::now() + Duration::from_secs(3);
+        let deadline = Instant::now() + Duration::from_secs(10);
         loop {
             match child.try_wait() {
                 Ok(Some(_)) => break,
