@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, MotionConfig } from "framer-motion";
 
 import {
+  getMeetingProposals,
   getMeetingSegments,
   getMeetings,
   getMeetingSpeakers,
@@ -15,6 +16,7 @@ import {
   type MeetingSummary,
   type SearchResult,
   type Speaker,
+  type SyncProposal,
   type TranscriptSegment,
 } from "./api";
 import { ActionItems } from "./ActionItems";
@@ -35,6 +37,7 @@ import { RecordButton } from "./RecordButton";
 import { SettingsPanel } from "./SettingsPanel";
 import { SourceSelector } from "./SourceSelector";
 import { SummaryPanel } from "./SummaryPanel";
+import { SyncPanel } from "./SyncPanel";
 import { toast } from "./toast";
 import { Toasts } from "./Toasts";
 import { viewSwap } from "./motion";
@@ -100,7 +103,10 @@ function App() {
   const [pastSummary, setPastSummary] = useState<MeetingSummary | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
-  const [meetingTab, setMeetingTab] = useState<"transcript" | "chat">("transcript");
+  const [meetingTab, setMeetingTab] = useState<"transcript" | "chat" | "sync">(
+    "transcript",
+  );
+  const [pastProposals, setPastProposals] = useState<SyncProposal[]>([]);
   const [showSettings, setShowSettings] = useState(false);
   const [showActions, setShowActions] = useState(false);
 
@@ -152,15 +158,18 @@ function App() {
     setMeetingTab("transcript");
     setPlaybackMs(null);
     setPlaybackOk(true);
+    setPastProposals([]);
     try {
-      const [segments, speakers, summary] = await Promise.all([
+      const [segments, speakers, summary, proposals] = await Promise.all([
         getMeetingSegments(id),
         getMeetingSpeakers(id),
         getMeetingSummary(id),
+        getMeetingProposals(id).catch(() => []),
       ]);
       setPastSegments(segments);
       setPastSpeakers(speakers);
       setPastSummary(summary);
+      setPastProposals(proposals);
     } catch {
       setPastSegments([]);
       setPastSpeakers([]);
@@ -168,6 +177,43 @@ function App() {
       toast("Couldn't load that meeting.");
     }
   };
+
+  // While the selected meeting is post-processing, poll until it's ready,
+  // then refresh its data and surface the new sync suggestions.
+  const selectedStatus = meetings.find((m) => m.id === selectedId)?.status;
+  useEffect(() => {
+    if (selectedId === null || selectedStatus !== "processing") return;
+    const meetingId = selectedId;
+    const timer = window.setInterval(async () => {
+      try {
+        const fresh = await getMeetings();
+        setMeetings(fresh);
+        const meeting = fresh.find((m) => m.id === meetingId);
+        if (meeting && meeting.status !== "processing") {
+          window.clearInterval(timer);
+          const [segments, speakers, summary, proposals] = await Promise.all([
+            getMeetingSegments(meetingId),
+            getMeetingSpeakers(meetingId),
+            getMeetingSummary(meetingId),
+            getMeetingProposals(meetingId).catch(() => []),
+          ]);
+          setPastSegments(segments);
+          setPastSpeakers(speakers);
+          setPastSummary(summary);
+          setPastProposals(proposals);
+          const pending = proposals.filter((p) => p.status === "proposed").length;
+          if (pending > 0) {
+            toast(
+              `${pending} sync suggestion${pending === 1 ? "" : "s"} ready — open the Sync tab to review.`,
+            );
+          }
+        }
+      } catch {
+        // Backend hiccup — keep polling; the connection dot reports it.
+      }
+    }, 3000);
+    return () => window.clearInterval(timer);
+  }, [selectedId, selectedStatus]);
 
   const handleRenameSpeaker = async (speakerId: number, name: string) => {
     try {
@@ -260,6 +306,9 @@ function App() {
 
   const selectedMeeting = meetings.find((m) => m.id === selectedId) ?? null;
   const viewingPast = selectedMeeting !== null;
+  const pendingProposals = pastProposals.filter(
+    (p) => p.status === "proposed" || p.status === "failed",
+  ).length;
 
   // Identity of the currently shown view — drives the crossfade transition.
   const viewKey = searchQuery.trim()
@@ -436,6 +485,15 @@ function App() {
                   >
                     Chat
                   </button>
+                  <button
+                    className={"tab" + (meetingTab === "sync" ? " tab--active" : "")}
+                    onClick={() => setMeetingTab("sync")}
+                  >
+                    Sync
+                    {pendingProposals > 0 && (
+                      <span className="tab__badge">{pendingProposals}</span>
+                    )}
+                  </button>
                 </div>
                 <ExportMenu
                   meetingId={selectedMeeting.id}
@@ -460,7 +518,29 @@ function App() {
                   />
                 </div>
               )}
-            {meetingTab === "chat" ? (
+            {meetingTab !== "sync" && pendingProposals > 0 && (
+              <div className="detect-banner">
+                <span>
+                  <strong>{pendingProposals}</strong> sync suggestion
+                  {pendingProposals === 1 ? "" : "s"} ready — file this meeting
+                  into your apps?
+                </span>
+                <div className="detect-banner__actions">
+                  <button
+                    className="detect-banner__record"
+                    onClick={() => setMeetingTab("sync")}
+                  >
+                    Review
+                  </button>
+                </div>
+              </div>
+            )}
+            {meetingTab === "sync" ? (
+              <SyncPanel
+                meetingId={selectedMeeting.id}
+                onChange={setPastProposals}
+              />
+            ) : meetingTab === "chat" ? (
               <MeetingChat meetingId={selectedMeeting.id} />
             ) : (
               <LiveTranscript

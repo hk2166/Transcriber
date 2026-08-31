@@ -122,10 +122,54 @@ export interface Settings {
   default_source: AudioSource;
   auto_summarize: boolean;
   auto_record: "off" | "prompt" | "auto";
+  integrations_enabled: Record<string, boolean>;
   llm_provider: string;
   llm_model: string;
   llm_base_url: string;
   api_keys: Record<string, string>;
+}
+
+export interface SyncProposal {
+  id: number;
+  meeting_id: number;
+  kind: "reminder" | "event" | "note" | "page";
+  target: string;
+  title: string;
+  body: string;
+  payload: { start_iso?: string; duration_min?: number; due_iso?: string };
+  status: "proposed" | "applied" | "skipped" | "failed" | "stale";
+  external_ref: string | null;
+  error: string | null;
+}
+
+export interface IntegrationInfo {
+  id: string;
+  label: string;
+  available: boolean;
+  enabled: boolean;
+}
+
+export function getIntegrations(): Promise<IntegrationInfo[]> {
+  return getJson<IntegrationInfo[]>("/integrations");
+}
+
+export function getMeetingProposals(meetingId: number): Promise<SyncProposal[]> {
+  return getJson<SyncProposal[]>(`/meetings/${meetingId}/proposals`);
+}
+
+export function patchProposal(
+  proposalId: number,
+  patch: Partial<Pick<SyncProposal, "title" | "body" | "payload" | "status">>,
+): Promise<SyncProposal> {
+  return patchJson<SyncProposal>(`/proposals/${proposalId}`, patch);
+}
+
+export function applyProposal(proposalId: number): Promise<SyncProposal> {
+  return postJson<SyncProposal>(`/proposals/${proposalId}/apply`);
+}
+
+export function applyAllProposals(meetingId: number): Promise<SyncProposal[]> {
+  return postJson<SyncProposal[]>(`/meetings/${meetingId}/proposals/apply`);
 }
 
 export interface ASREngine {

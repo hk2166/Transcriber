@@ -238,3 +238,72 @@ def test_action_items_cascade_on_delete(conn):
     replace_action_items(conn, meeting_id, ["Send the deck"])
     delete_meeting(conn, meeting_id)
     assert get_action_items(conn) == []
+
+
+# ---------------------------------------------------------------------------
+# Sync proposals (integrations, Aug 2026)
+# ---------------------------------------------------------------------------
+
+from packages.storage import (  # noqa: E402
+    get_proposal,
+    get_proposals,
+    insert_proposals,
+    mark_proposals_stale,
+    set_proposal_result,
+    set_proposal_status,
+    update_proposal,
+)
+
+
+def _seed_proposals(conn):
+    meeting_id = _new_meeting(conn)
+    insert_proposals(conn, meeting_id, [
+        ("reminder", "apple-reminders", "Freeze the build", "ctx", {}),
+        ("event", "apple-calendar", "Design review", "ctx",
+         {"start_iso": "2026-08-27T14:00", "duration_min": 45}),
+    ])
+    return meeting_id
+
+
+def test_proposals_roundtrip(conn):
+    meeting_id = _seed_proposals(conn)
+    items = get_proposals(conn, meeting_id)
+    assert [p.kind for p in items] == ["reminder", "event"]
+    assert items[1].payload["duration_min"] == 45
+    assert all(p.status == "proposed" for p in items)
+
+
+def test_proposal_edit_and_skip(conn):
+    meeting_id = _seed_proposals(conn)
+    first = get_proposals(conn, meeting_id)[0]
+    assert update_proposal(conn, first.id, title="Freeze by Wed") is True
+    set_proposal_status(conn, first.id, "skipped")
+    refreshed = get_proposal(conn, first.id)
+    assert (refreshed.title, refreshed.status) == ("Freeze by Wed", "skipped")
+
+
+def test_proposal_apply_result_and_idempotence(conn):
+    meeting_id = _seed_proposals(conn)
+    first = get_proposals(conn, meeting_id)[0]
+    set_proposal_result(conn, first.id, status="applied", external_ref="uid-1")
+    applied = get_proposal(conn, first.id)
+    assert (applied.status, applied.external_ref) == ("applied", "uid-1")
+    assert applied.applied_at is not None
+    # applied rows resist status flips and edits
+    assert set_proposal_status(conn, first.id, "skipped") is False
+    assert update_proposal(conn, first.id, title="nope") is False
+
+
+def test_stale_hides_unapplied_keeps_applied(conn):
+    meeting_id = _seed_proposals(conn)
+    first, second = get_proposals(conn, meeting_id)
+    set_proposal_result(conn, first.id, status="applied", external_ref="uid-1")
+    mark_proposals_stale(conn, meeting_id)
+    remaining = get_proposals(conn, meeting_id)
+    assert [p.id for p in remaining] == [first.id]  # applied survives, rest hidden
+
+
+def test_proposals_cascade_on_meeting_delete(conn):
+    meeting_id = _seed_proposals(conn)
+    delete_meeting(conn, meeting_id)
+    assert get_proposals(conn, meeting_id) == []

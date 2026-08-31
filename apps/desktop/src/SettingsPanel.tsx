@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { scrim, sheet } from "./motion";
 import {
   getASREngines,
+  getIntegrations,
   getLLMProviders,
   getSettings,
   getSystemStatus,
@@ -12,6 +13,7 @@ import {
   testLLM,
   type ASREngine,
   type AudioSource,
+  type IntegrationInfo,
   type LLMProvider,
   type Settings,
   type SystemStatus,
@@ -36,6 +38,7 @@ export function SettingsPanel({
   const [saving, setSaving] = useState(false);
   const [engines, setEngines] = useState<ASREngine[]>([]);
   const [providers, setProviders] = useState<LLMProvider[]>([]);
+  const [integrations, setIntegrations] = useState<IntegrationInfo[]>([]);
   const [testState, setTestState] = useState<
     { kind: "idle" } | { kind: "testing" } | { kind: "ok" } | { kind: "fail"; message: string }
   >({ kind: "idle" });
@@ -45,6 +48,7 @@ export function SettingsPanel({
     getSystemStatus().then(setStatus).catch(() => setStatus(null));
     getLLMProviders().then(setProviders).catch(() => setProviders([]));
     getASREngines().then(setEngines).catch(() => setEngines([]));
+    getIntegrations().then(setIntegrations).catch(() => setIntegrations([]));
   }, []);
 
   // Dismiss on Escape, like a native macOS sheet.
@@ -316,6 +320,33 @@ export function SettingsPanel({
           />
           <span>Summarise meetings automatically</span>
         </label>
+
+        <div className="settings__field">
+          <span>Sync suggestions</span>
+          <small>
+            After each meeting, Confab proposes items for these apps. Nothing
+            is sent until you approve it on the Sync tab.
+          </small>
+          {integrations.map((integration) => (
+            <label className="settings__toggle" key={integration.id}>
+              <input
+                type="checkbox"
+                checked={
+                  settings.integrations_enabled[integration.id] ?? true
+                }
+                onChange={(e) =>
+                  patch({
+                    integrations_enabled: {
+                      ...settings.integrations_enabled,
+                      [integration.id]: e.target.checked,
+                    },
+                  })
+                }
+              />
+              <span>{integration.label}</span>
+            </label>
+          ))}
+        </div>
 
         <label className="settings__field">
           <span>When a Zoom/Webex call starts</span>

@@ -4,5 +4,7 @@
 <dict>
     <key>NSMicrophoneUsageDescription</key>
     <string>Confab records your meetings to transcribe them on this Mac. Audio never leaves your device.</string>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>Confab files the meeting notes, reminders, and events you approve into Apple apps like Reminders, Calendar, and Notes.</string>
 </dict>
 </plist>

@@ -16,6 +16,7 @@ import meeting_detect
 from database import close_db, get_db
 from routers.action_items import router as action_items_router
 from routers.audio import router as audio_router
+from routers.proposals import router as proposals_router
 from routers.chat import router as chat_router
 from routers.export import router as export_router
 from routers.meetings import router as meetings_router
@@ -103,6 +104,7 @@ app.include_router(chat_router)
 app.include_router(export_router)
 app.include_router(settings_router)
 app.include_router(action_items_router)
+app.include_router(proposals_router)
 
 @app.get("/health", tags=["meta"])
 async def health() -> dict[str, str]:

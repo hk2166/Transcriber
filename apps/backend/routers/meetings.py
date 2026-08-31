@@ -127,8 +127,12 @@ def read_summary(meeting_id: int) -> StoredSummary:
 
 
 @router.post("/{meeting_id}/summarize")
-def trigger_summary(meeting_id: int) -> dict[str, str]:
-    """Regenerate the summary in the background."""
+async def trigger_summary(meeting_id: int) -> dict[str, str]:
+    """Regenerate the summary in the background.
+
+    async so it runs ON the event loop: ``schedule_summary`` uses
+    ``asyncio.create_task``, which a threadpool (sync ``def``) can't do.
+    """
     _require_meeting(meeting_id)
     postprocess_job.schedule_summary(meeting_id)
     return {"status": "processing"}

@@ -15,6 +15,7 @@ from datetime import datetime
 __all__ = [
     "ActionItem",
     "Meeting",
+    "Proposal",
     "Segment",
     "Speaker",
     "StoredSummary",
@@ -25,18 +26,25 @@ __all__ = [
     "get_action_items",
     "get_meeting",
     "get_meetings",
+    "get_proposal",
+    "get_proposals",
     "get_segments",
     "get_segments_by_ids",
     "get_speakers",
     "get_summary",
+    "insert_proposals",
     "insert_segment",
+    "mark_proposals_stale",
     "rename_speaker",
     "replace_action_items",
     "save_summary",
     "set_action_item_done",
     "set_meeting_status",
     "set_meeting_title",
+    "set_proposal_result",
+    "set_proposal_status",
     "set_segment_speaker",
+    "update_proposal",
     "update_segment_text",
 ]
 
@@ -103,6 +111,24 @@ class ActionItem:
     meeting_started_at: str
     text: str
     done: bool
+
+
+@dataclass
+class Proposal:
+    """A cross-app sync suggestion; sent nowhere until the user applies it."""
+
+    id: int
+    meeting_id: int
+    kind: str  # reminder | event | note | page
+    target: str  # integration id
+    title: str
+    body: str
+    payload: dict  # kind-specific (parsed JSON)
+    status: str  # proposed | applied | skipped | failed | stale
+    external_ref: str | None
+    error: str | None
+    created_at: str
+    applied_at: str | None
 
 
 def _title_for(started_at: datetime) -> str:
@@ -369,6 +395,133 @@ def set_action_item_done(conn: sqlite3.Connection, item_id: int, done: bool) -> 
     )
     conn.commit()
     return cursor.rowcount > 0
+
+
+def _proposal(row: sqlite3.Row) -> Proposal:
+    return Proposal(
+        id=row["id"],
+        meeting_id=row["meeting_id"],
+        kind=row["kind"],
+        target=row["target"],
+        title=row["title"],
+        body=row["body"],
+        payload=json.loads(row["payload"] or "{}"),
+        status=row["status"],
+        external_ref=row["external_ref"],
+        error=row["error"],
+        created_at=row["created_at"],
+        applied_at=row["applied_at"],
+    )
+
+
+def insert_proposals(
+    conn: sqlite3.Connection,
+    meeting_id: int,
+    drafts: list[tuple[str, str, str, str, dict]],
+) -> None:
+    """Insert drafts as ``proposed`` rows.
+
+    Each draft is ``(kind, target, title, body, payload)`` — primitives only,
+    so this package stays independent of the integrations package.
+    """
+    conn.executemany(
+        "INSERT INTO sync_proposals (meeting_id, kind, target, title, body, payload) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        [
+            (meeting_id, kind, target, title, body, json.dumps(payload))
+            for kind, target, title, body, payload in drafts
+        ],
+    )
+    conn.commit()
+
+
+def get_proposals(conn: sqlite3.Connection, meeting_id: int) -> list[Proposal]:
+    """A meeting's non-stale proposals, in creation order."""
+    rows = conn.execute(
+        "SELECT * FROM sync_proposals "
+        "WHERE meeting_id = ? AND status != 'stale' ORDER BY id",
+        (meeting_id,),
+    ).fetchall()
+    return [_proposal(row) for row in rows]
+
+
+def get_proposal(conn: sqlite3.Connection, proposal_id: int) -> Proposal | None:
+    row = conn.execute(
+        "SELECT * FROM sync_proposals WHERE id = ?", (proposal_id,)
+    ).fetchone()
+    return _proposal(row) if row else None
+
+
+def update_proposal(
+    conn: sqlite3.Connection,
+    proposal_id: int,
+    *,
+    title: str | None = None,
+    body: str | None = None,
+    payload: dict | None = None,
+) -> bool:
+    """Edit an un-applied proposal's content; returns False if unknown/applied."""
+    sets, args = [], []
+    if title is not None:
+        sets.append("title = ?")
+        args.append(title)
+    if body is not None:
+        sets.append("body = ?")
+        args.append(body)
+    if payload is not None:
+        sets.append("payload = ?")
+        args.append(json.dumps(payload))
+    if not sets:
+        return True
+    args.append(proposal_id)
+    cursor = conn.execute(
+        f"UPDATE sync_proposals SET {', '.join(sets)} "
+        "WHERE id = ? AND status IN ('proposed', 'failed', 'skipped')",
+        args,
+    )
+    conn.commit()
+    return cursor.rowcount > 0
+
+
+def set_proposal_status(
+    conn: sqlite3.Connection, proposal_id: int, status: str
+) -> bool:
+    """Move a proposal between user-driven states (skip / un-skip)."""
+    cursor = conn.execute(
+        "UPDATE sync_proposals SET status = ? "
+        "WHERE id = ? AND status != 'applied'",
+        (status, proposal_id),
+    )
+    conn.commit()
+    return cursor.rowcount > 0
+
+
+def set_proposal_result(
+    conn: sqlite3.Connection,
+    proposal_id: int,
+    *,
+    status: str,
+    external_ref: str | None = None,
+    error: str | None = None,
+) -> None:
+    """Record an apply attempt's outcome (``applied`` or ``failed``)."""
+    conn.execute(
+        "UPDATE sync_proposals SET status = ?, external_ref = ?, error = ?, "
+        "applied_at = CASE WHEN ? = 'applied' THEN datetime('now') ELSE applied_at END "
+        "WHERE id = ?",
+        (status, external_ref, error, status, proposal_id),
+    )
+    conn.commit()
+
+
+def mark_proposals_stale(conn: sqlite3.Connection, meeting_id: int) -> None:
+    """Hide un-applied proposals before re-proposing (re-summarise path)."""
+    conn.execute(
+        "UPDATE sync_proposals SET status = 'stale' "
+        "WHERE meeting_id = ? AND status IN ('proposed', 'failed', 'skipped')",
+        (meeting_id,),
+    )
+    conn.commit()
 
 
 def rename_speaker(conn: sqlite3.Connection, speaker_id: int, name: str) -> bool:

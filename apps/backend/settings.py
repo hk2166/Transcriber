@@ -34,6 +34,10 @@ class Settings(BaseModel):
     #: What to do when a meeting app (Zoom/Webex) starts a call:
     #: "off" = ignore, "prompt" = offer to record, "auto" = start recording.
     auto_record: Literal["off", "prompt", "auto"] = "prompt"
+    #: Per-integration toggles for sync proposals, e.g. {"apple-notes": false}.
+    #: Missing key = enabled: proposing is local-only, and nothing is ever
+    #: sent without a per-item approval (docs/INTEGRATIONS.md).
+    integrations_enabled: dict[str, bool] = {}
     #: Which LLM powers summaries/titles/chat. "ollama" keeps everything
     #: on-device; any other provider sends transcript text to that API.
     llm_provider: str = "ollama"

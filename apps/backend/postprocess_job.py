@@ -140,8 +140,20 @@ async def run_postprocess(meeting_id: int, wav_path: str) -> None:
     except Exception:
         logger.exception("Indexing failed for meeting %d.", meeting_id)
 
+    await _propose_sync(meeting_id)
+
     set_meeting_status(db, meeting_id, "ready")
     logger.info("Post-processing complete for meeting %d.", meeting_id)
+
+
+async def _propose_sync(meeting_id: int) -> None:
+    """Generate cross-app sync proposals (local only; best-effort)."""
+    try:
+        import proposal_service
+
+        await asyncio.to_thread(proposal_service.propose_for_meeting, meeting_id)
+    except Exception:
+        logger.exception("Sync proposals failed for meeting %d.", meeting_id)
 
 
 async def run_summary(meeting_id: int) -> None:
@@ -155,6 +167,8 @@ async def run_summary(meeting_id: int) -> None:
         logger.warning("Ollama unavailable — no summary for meeting %d.", meeting_id)
     except Exception:
         logger.exception("Re-summary failed for meeting %d.", meeting_id)
+    # Fresh summary ⇒ fresh proposals (old un-applied ones go stale).
+    await _propose_sync(meeting_id)
 
 
 def _track(task: asyncio.Task) -> None:

@@ -1,6 +1,10 @@
 # Integrations — design (propose → approve → apply)
 
-*Status: design for review — no code yet. Aug 2026.*
+*Status: Phase 1 (Apple Reminders/Calendar/Notes) SHIPPED — Aug 2026. Verified
+end-to-end against real Apple apps. Phase 2 (Notion) and 3 (OAuth) remain
+design-only. One deviation from this doc: no separate `approved` status —
+clicking Apply IS the approval, so statuses are proposed | applied | skipped |
+failed | stale.*
 
 Connect Confab to the apps where meeting outcomes live — Apple Reminders,
 Calendar, Notes, then Notion, later Google/Slack — **without breaking the

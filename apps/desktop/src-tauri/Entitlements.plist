@@ -14,5 +14,9 @@
     <true/>
     <key>com.apple.security.cs.allow-dyld-environment-variables</key>
     <true/>
+    <!-- Cross-app sync: the sidecar drives Reminders/Calendar/Notes via
+         AppleScript, but only for proposals the user explicitly approves. -->
+    <key>com.apple.security.automation.apple-events</key>
+    <true/>
 </dict>
 </plist>
