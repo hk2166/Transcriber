@@ -8,6 +8,7 @@ import {
   startModelDownload,
   type ASREngine,
 } from "./api";
+import { confirmDialog } from "./confirm";
 import { toast } from "./toast";
 
 const isTauri =
@@ -75,9 +76,11 @@ export function EngineSelector() {
     const after = isTauri
       ? "Confab will restart to load it."
       : "It loads on your next recording.";
-    if (!window.confirm(`Switch transcription to “${engine.label}”? ${after}`)) {
-      return;
-    }
+    const ok = await confirmDialog({
+      message: `Switch transcription to “${engine.label}”? ${after}`,
+      confirmLabel: isTauri ? "Switch & restart" : "Switch",
+    });
+    if (!ok) return;
     setSwitching(true);
     try {
       const settings = await getSettings();

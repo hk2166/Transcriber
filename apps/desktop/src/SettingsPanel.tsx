@@ -16,6 +16,7 @@ import {
   type Settings,
   type SystemStatus,
 } from "./api";
+import { confirmDialog } from "./confirm";
 import { EngineSelector } from "./EngineSelector";
 import { GoogleConnect } from "./GoogleConnect";
 import { IconClose } from "./Icons";
@@ -98,9 +99,13 @@ export function SettingsPanel({
   };
 
   const wipe = async () => {
-    if (!confirm("Delete ALL meetings, recordings, and settings? This cannot be undone.")) {
-      return;
-    }
+    const ok = await confirmDialog({
+      message:
+        "Delete ALL meetings, recordings, and settings? This cannot be undone.",
+      confirmLabel: "Delete everything",
+      danger: true,
+    });
+    if (!ok) return;
     await resetAllData();
     onReset();
     onClose();

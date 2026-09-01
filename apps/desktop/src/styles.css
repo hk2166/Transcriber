@@ -439,6 +439,31 @@ button svg,
 }
 .sidebar__settings:hover { background: var(--bg-hover); color: var(--text-primary); }
 
+/* In-app confirm (window.confirm is a no-op in the packaged webview). */
+.confirm-backdrop {
+  position: fixed; inset: 0; z-index: 300;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex; align-items: center; justify-content: center;
+  animation: confirm-fade 0.15s ease-out;
+}
+@keyframes confirm-fade { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .confirm-backdrop { animation: none; } }
+.confirm {
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+  padding: 20px; width: min(360px, calc(100vw - 48px));
+}
+.confirm__message { font-size: 14px; line-height: 1.5; color: var(--text-primary); margin: 0 0 16px; }
+.confirm__actions { display: flex; justify-content: flex-end; gap: 8px; }
+.confirm__btn {
+  font-size: 13px; font-weight: 500; color: var(--text-primary);
+  background: var(--bg-hover); border: 1px solid var(--border);
+  padding: 7px 14px; border-radius: 8px; cursor: pointer;
+}
+.confirm__btn:hover { border-color: var(--border-strong); }
+.confirm__btn--primary { color: var(--bg-elevated); background: var(--accent); border-color: var(--accent); }
+.confirm__btn--danger { color: #fff; background: var(--record); border-color: var(--record); }
+
 .modal-backdrop {
   position: fixed; inset: 0; z-index: 100;
   background: rgba(0,0,0,0.5);
