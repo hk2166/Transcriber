@@ -141,7 +141,7 @@ export function SettingsPanel({
       exit="exit"
     >
       <motion.div
-        className="modal"
+        className="modal modal--wide"
         onClick={(e) => e.stopPropagation()}
         variants={sheet}
       >
@@ -157,11 +157,15 @@ export function SettingsPanel({
           <Status ok={status?.blackhole_available} label="BlackHole (system audio)" />
         </div>
 
+        <div className="settings__columns">
+        <div className="settings__col">
         <div className="settings__field">
           <span>Transcription engine</span>
           <EngineSelector />
         </div>
+        </div>
 
+        <div className="settings__col">
         <div className="settings__group">
           <label className="settings__field">
             <span>AI provider (summaries &amp; chat)</span>
@@ -277,32 +281,6 @@ export function SettingsPanel({
           </div>
         </div>
 
-        <label className="settings__field">
-          <span>Default audio source</span>
-          <select
-            value={settings.default_source}
-            onChange={(e) => patch({ default_source: e.target.value as AudioSource })}
-          >
-            {SOURCES.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="settings__field">
-          <span>Speech sensitivity ({settings.vad_threshold.toFixed(2)})</span>
-          <input
-            type="range"
-            min="0.2"
-            max="0.8"
-            step="0.05"
-            value={settings.vad_threshold}
-            onChange={(e) => patch({ vad_threshold: Number(e.target.value) })}
-          />
-        </label>
-
         <label className="settings__toggle">
           <input
             type="checkbox"
@@ -342,6 +320,52 @@ export function SettingsPanel({
             </label>
           )}
         </div>
+        </div>
+
+        <div className="settings__col">
+        <label className="settings__field">
+          <span>Default audio source</span>
+          <select
+            value={settings.default_source}
+            onChange={(e) => patch({ default_source: e.target.value as AudioSource })}
+          >
+            {SOURCES.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="settings__field">
+          <span>Speech sensitivity ({settings.vad_threshold.toFixed(2)})</span>
+          <input
+            type="range"
+            min="0.2"
+            max="0.8"
+            step="0.05"
+            value={settings.vad_threshold}
+            onChange={(e) => patch({ vad_threshold: Number(e.target.value) })}
+          />
+        </label>
+
+        <label className="settings__field">
+          <span>When a meeting starts (Zoom, Meet, Teams…)</span>
+          <select
+            value={settings.auto_record}
+            onChange={(e) =>
+              patch({ auto_record: e.target.value as Settings["auto_record"] })
+            }
+          >
+            {(Object.keys(AUTO_RECORD_LABELS) as Settings["auto_record"][]).map(
+              (mode) => (
+                <option key={mode} value={mode}>
+                  {AUTO_RECORD_LABELS[mode]}
+                </option>
+              ),
+            )}
+          </select>
+        </label>
 
         <div className="settings__field">
           <span>Sync suggestions</span>
@@ -371,24 +395,8 @@ export function SettingsPanel({
         </div>
 
         <GoogleConnect />
-
-        <label className="settings__field">
-          <span>When a meeting starts (Zoom, Meet, Teams…)</span>
-          <select
-            value={settings.auto_record}
-            onChange={(e) =>
-              patch({ auto_record: e.target.value as Settings["auto_record"] })
-            }
-          >
-            {(Object.keys(AUTO_RECORD_LABELS) as Settings["auto_record"][]).map(
-              (mode) => (
-                <option key={mode} value={mode}>
-                  {AUTO_RECORD_LABELS[mode]}
-                </option>
-              ),
-            )}
-          </select>
-        </label>
+        </div>
+        </div>
 
         <footer className="settings__footer">
           <button className="settings__danger" onClick={wipe}>
