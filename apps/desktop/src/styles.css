@@ -666,6 +666,12 @@ button svg,
   color: var(--text-secondary);
 }
 .source-warning strong { color: var(--text-primary); font-weight: 600; }
+.source-warning__fix {
+  margin-left: 6px; font-size: 12px; font-weight: 600;
+  color: var(--bg-elevated); background: var(--accent);
+  border: none; padding: 4px 10px; border-radius: 999px; cursor: pointer;
+}
+.source-warning__fix:disabled { opacity: 0.6; cursor: default; }
 
 /* ===== Control bar (Day 5) ===== */
 .controlbar {

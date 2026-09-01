@@ -278,6 +278,21 @@ export function getSystemStatus(): Promise<SystemStatus> {
   return getJson<SystemStatus>("/system/status");
 }
 
+export interface AudioRouting {
+  blackhole_present: boolean;
+  routed: boolean;
+  output_name: string | null;
+  confab_aggregate_active: boolean;
+}
+
+export function getAudioRouting(): Promise<AudioRouting> {
+  return getJson<AudioRouting>("/audio/routing");
+}
+
+export function enableAudioRouting(): Promise<AudioRouting> {
+  return postJson<AudioRouting>("/audio/routing/enable");
+}
+
 export function resetAllData(): Promise<{ reset: boolean }> {
   return postJson<{ reset: boolean }>("/system/reset");
 }

@@ -8,12 +8,45 @@ import logging
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 
-from packages.audio import AudioCapture
+from packages.audio import AudioCapture, routing
 from sessions import AudioSource, SessionConflict, SessionNotFound, manager
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/audio", tags=["audio"])
+
+
+class RoutingStatus(BaseModel):
+    blackhole_present: bool
+    routed: bool
+    output_name: str | None
+    confab_aggregate_active: bool
+
+
+@router.get("/routing", response_model=RoutingStatus)
+def routing_status() -> RoutingStatus:
+    """Is system audio actually reaching BlackHole (installed ≠ routed)?"""
+    return RoutingStatus(**routing.status())
+
+
+@router.post("/routing/enable", response_model=RoutingStatus)
+def routing_enable() -> RoutingStatus:
+    """One click: pair the current output with BlackHole and switch to it."""
+    try:
+        routing.enable()
+    except routing.RoutingError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return RoutingStatus(**routing.status())
+
+
+@router.post("/routing/disable", response_model=RoutingStatus)
+def routing_disable() -> RoutingStatus:
+    """Restore the plain output device and remove Confab's Multi-Output."""
+    try:
+        routing.disable()
+    except routing.RoutingError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return RoutingStatus(**routing.status())
 
 
 class StartRequest(BaseModel):

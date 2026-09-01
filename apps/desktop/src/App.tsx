@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, MotionConfig } from "framer-motion";
 
 import {
+  enableAudioRouting,
+  getAudioRouting,
   getMeetingApp,
   getMeetingProposals,
   getMeetingSegments,
@@ -9,11 +11,11 @@ import {
   getMeetingSpeakers,
   getMeetingSummary,
   getSettings,
-  getSystemStatus,
   meetingAudioUrl,
   renameSpeaker,
   searchSegments,
   updateSegmentText,
+  type AudioRouting,
   type AudioSource,
   type Meeting,
   type MeetingApp,
@@ -21,7 +23,6 @@ import {
   type SearchResult,
   type Speaker,
   type SyncProposal,
-  type SystemStatus,
   type TranscriptSegment,
 } from "./api";
 import { ActionItems } from "./ActionItems";
@@ -87,7 +88,8 @@ const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window
 
 function App() {
   const [source, setSource] = useState<AudioSource>("both");
-  const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
+  const [routing, setRouting] = useState<AudioRouting | null>(null);
+  const [fixingRouting, setFixingRouting] = useState(false);
   const {
     status,
     level,
@@ -136,26 +138,48 @@ function App() {
     }
   }, []);
 
-  // Load meetings on mount and whenever a recording finishes (status → idle).
+  // Load meetings on mount and whenever a recording finishes (status → idle);
+  // re-check audio routing at the same moments (headphones reconnecting flips
+  // the default output behind our back).
   useEffect(() => {
-    if (idle) refreshMeetings();
+    if (idle) {
+      refreshMeetings();
+      getAudioRouting().then(setRouting).catch(() => {});
+    }
   }, [idle, refreshMeetings]);
 
-  // On launch, honour the saved default audio source (the record screen used to
-  // ignore it) and learn whether system-audio capture (BlackHole) is available.
+  // On launch, honour the saved default audio source (the record screen used
+  // to ignore it).
   useEffect(() => {
     getSettings()
       .then((s) => setSource(s.default_source))
       .catch(() => {});
-    getSystemStatus().then(setSystemStatus).catch(() => {});
   }, []);
 
-  // The user picked a source that needs system audio, but BlackHole isn't set
-  // up — so we'd silently capture only their mic (half of a real meeting).
-  const missingSystemAudio =
-    (source === "both" || source === "system") &&
-    systemStatus !== null &&
-    !systemStatus.blackhole_available;
+  // The chosen source needs system audio, but the Mac's sound isn't reaching
+  // BlackHole — either it's not installed, or (the everyday case) the default
+  // output is plain headphones/speakers, so we'd record only the mic.
+  const needsSystemAudio = source === "both" || source === "system";
+  const blackholeMissing =
+    needsSystemAudio && routing !== null && !routing.blackhole_present;
+  const notRouted =
+    needsSystemAudio &&
+    routing !== null &&
+    routing.blackhole_present &&
+    !routing.routed;
+
+  const fixRouting = async () => {
+    setFixingRouting(true);
+    try {
+      const next = await enableAudioRouting();
+      setRouting(next);
+      toast(`System audio routed — sound keeps playing through ${next.output_name}.`);
+    } catch (error) {
+      toast(error instanceof Error ? error.message : "Couldn't route system audio.");
+    } finally {
+      setFixingRouting(false);
+    }
+  };
 
   // Debounced semantic search.
   useEffect(() => {
@@ -710,11 +734,25 @@ function App() {
               speechActive={speechActive}
             />
 
-            {idle && missingSystemAudio && (
+            {idle && blackholeMissing && (
               <p className="source-warning" role="status">
                 You’ll only capture your own microphone. Install{" "}
                 <strong>BlackHole</strong> to record the other participants too.
               </p>
+            )}
+            {idle && notRouted && (
+              <div className="source-warning" role="status">
+                Your Mac’s sound is going to{" "}
+                <strong>{routing?.output_name ?? "another device"}</strong> —
+                Confab can’t hear the meeting.{" "}
+                <button
+                  className="source-warning__fix"
+                  onClick={fixRouting}
+                  disabled={fixingRouting}
+                >
+                  {fixingRouting ? "Routing…" : "Fix automatically"}
+                </button>
+              </div>
             )}
 
             <footer className="controlbar">
