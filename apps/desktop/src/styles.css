@@ -1,25 +1,34 @@
+/* Inter — the ui-ux-pro-max system's face for high-end productivity apps.
+   Offline (packaged app without network) falls back to the system stack. */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
 /* ===== Reset ===== */
 *, *::before, *::after { box-sizing: border-box; }
 * { margin: 0; }
 html, body, #root { height: 100%; }
 button { cursor: pointer; font-family: inherit; color: inherit; }
 
-/* ===== Design tokens — dark is the default (Task.md) ===== */
+/* ===== Design tokens — ui-ux-pro-max design system (Flat, teal + action
+   orange, Inter). Dark is Confab's default; light mirrors the generated
+   palette (#0D9488 primary on #F0FDFA). ===== */
 :root {
-  --bg-base: #0a0a0a;
-  --bg-elevated: #151515;
-  --bg-sidebar: rgba(13, 13, 13, 0.72);
-  --bg-hover: rgba(255, 255, 255, 0.05);
-  --text-primary: #fafafa;
-  --text-secondary: rgba(255, 255, 255, 0.56);
-  --text-tertiary: rgba(255, 255, 255, 0.32);
-  --border: rgba(255, 255, 255, 0.10);
-  --border-strong: rgba(255, 255, 255, 0.22);
-  --accent: #ededed;        /* near-white primary — Canvas UI is monochrome */
-  --on-accent: #0a0a0a;     /* text/glyphs on a filled primary surface */
-  --record: #ff453a;
-  --record-glow: rgba(255, 69, 58, 0.35);
-  --ok: #30d158;
+  --bg-base: #0b1416;
+  --bg-elevated: #111c1f;
+  --bg-sidebar: rgba(10, 18, 20, 0.74);
+  --bg-hover: rgba(45, 212, 191, 0.06);
+  --text-primary: #ecf6f4;
+  --text-secondary: rgba(226, 244, 241, 0.60);
+  --text-tertiary: rgba(226, 244, 241, 0.34);
+  --border: rgba(94, 234, 212, 0.10);
+  --border-strong: rgba(94, 234, 212, 0.24);
+  --accent: #2dd4bf;        /* teal primary, brightened for dark ground */
+  --on-accent: #04201c;     /* near-black on teal — 4.5:1+ */
+  --cta: #f97316;           /* action orange (downloads, fixes, generate) */
+  --on-cta: #1a0d02;
+  --record: #ef4444;
+  --record-glow: rgba(239, 68, 68, 0.35);
+  --ok: #34d399;
+  --ring: #2dd4bf;
   --radius: 10px;
   --radius-lg: 14px;
   --sidebar-width: 260px;
@@ -29,26 +38,29 @@ button { cursor: pointer; font-family: inherit; color: inherit; }
 
 @media (prefers-color-scheme: light) {
   :root {
-    --bg-base: #f7f7f8;
+    --bg-base: #f0fdfa;
     --bg-elevated: #ffffff;
-    --bg-sidebar: rgba(250, 250, 251, 0.80);
-    --bg-hover: rgba(0, 0, 0, 0.04);
-    --text-primary: #0a0a0a;
-    --text-secondary: rgba(0, 0, 0, 0.56);
-    --text-tertiary: rgba(0, 0, 0, 0.36);
-    --border: rgba(0, 0, 0, 0.10);
-    --border-strong: rgba(0, 0, 0, 0.18);
-    --accent: #0a0a0a;      /* near-black primary */
-    --on-accent: #fafafa;
-    --record: #ff3b30;
-    --record-glow: rgba(255, 59, 48, 0.3);
-    --ok: #30a46c;
+    --bg-sidebar: rgba(240, 253, 250, 0.82);
+    --bg-hover: rgba(13, 148, 136, 0.06);
+    --text-primary: #134e4a;
+    --text-secondary: rgba(19, 78, 74, 0.66);
+    --text-tertiary: rgba(19, 78, 74, 0.42);
+    --border: rgba(13, 148, 136, 0.16);
+    --border-strong: rgba(13, 148, 136, 0.32);
+    --accent: #0d9488;      /* teal primary (generated) */
+    --on-accent: #ffffff;
+    --cta: #ea580c;         /* action orange (generated) */
+    --on-cta: #ffffff;
+    --record: #dc2626;
+    --record-glow: rgba(220, 38, 38, 0.3);
+    --ok: #0d9488;
+    --ring: #0d9488;
     color-scheme: light;
   }
 }
 
 body {
-  font-family: ui-sans-serif, -apple-system, system-ui, "SF Pro Text", "Inter",
+  font-family: "Inter", ui-sans-serif, -apple-system, system-ui, "SF Pro Text",
     "Segoe UI", sans-serif;
   font-optical-sizing: auto;
   line-height: 1.5;
@@ -57,6 +69,9 @@ body {
   background: var(--bg-base);
   -webkit-font-smoothing: antialiased;
 }
+
+/* Keyboard focus is always visible (pre-delivery checklist). */
+:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 
 /* Icons inherit text color and never shrink in flex rows. */
 button svg,
@@ -477,7 +492,7 @@ button.status-line--fix:disabled { cursor: default; opacity: 0.7; }
   padding: 7px 14px; border-radius: 8px; cursor: pointer;
 }
 .confirm__btn:hover { border-color: var(--border-strong); }
-.confirm__btn--primary { color: var(--bg-elevated); background: var(--accent); border-color: var(--accent); }
+.confirm__btn--primary { color: var(--on-accent); background: var(--accent); border-color: var(--accent); }
 .confirm__btn--danger { color: #fff; background: var(--record); border-color: var(--record); }
 
 .modal-backdrop {
@@ -532,7 +547,7 @@ button.status-line--fix:disabled { cursor: default; opacity: 0.7; }
 .settings__danger { font-size: 13px; color: var(--record); background: transparent; border: 1px solid var(--border); padding: 8px 12px; border-radius: 8px; }
 .settings__danger:hover { border-color: var(--record); }
 .settings__cancel { font-size: 13px; color: var(--text-primary); background: var(--bg-hover); border: none; padding: 8px 14px; border-radius: 8px; }
-.settings__save { font-size: 13px; font-weight: 500; color: #fff; background: var(--accent); border: none; padding: 8px 16px; border-radius: 8px; }
+.settings__save { font-size: 13px; font-weight: 500; color: var(--on-accent); background: var(--accent); border: none; padding: 8px 16px; border-radius: 8px; }
 .settings__save:disabled { opacity: 0.5; }
 .settings__loading { font-size: 14px; color: var(--text-secondary); text-align: center; }
 
@@ -666,8 +681,8 @@ button.status-line--fix:disabled { cursor: default; opacity: 0.7; }
 .summary__generate {
   font-size: 13px;
   font-weight: 500;
-  color: var(--bg-elevated);
-  background: var(--accent);
+  color: var(--on-cta);
+  background: var(--cta);
   border: none;
   padding: 8px 16px;
   border-radius: 8px;
@@ -700,7 +715,7 @@ button.status-line--fix:disabled { cursor: default; opacity: 0.7; }
 .source-warning strong { color: var(--text-primary); font-weight: 600; }
 .source-warning__fix {
   margin-left: 6px; font-size: 12px; font-weight: 600;
-  color: var(--bg-elevated); background: var(--accent);
+  color: var(--on-cta); background: var(--cta);
   border: none; padding: 4px 10px; border-radius: 999px; cursor: pointer;
 }
 .source-warning__fix:disabled { opacity: 0.6; cursor: default; }
@@ -1085,7 +1100,7 @@ summary:focus-visible,
 .engine-card__downloading { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 .engine-card__download {
   padding: 3px 10px; font-size: 11px; font-weight: 600;
-  color: var(--on-accent); background: var(--accent);
+  color: var(--on-cta); background: var(--cta);
   border: none; border-radius: 999px; cursor: pointer;
 }
 .engine-card__download:hover { filter: brightness(1.1); }
