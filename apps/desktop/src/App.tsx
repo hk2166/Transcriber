@@ -508,13 +508,14 @@ function App() {
           {meetings.length === 0 ? (
             <p className="meeting-list__empty">No meetings yet</p>
           ) : (
-            meetings.map((meeting) => (
+            meetings.map((meeting, index) => (
               <button
                 key={meeting.id}
                 className={
                   "meeting-item" +
                   (meeting.id === selectedId ? " meeting-item--active" : "")
                 }
+                style={{ "--i": index } as React.CSSProperties}
                 onClick={() => selectMeeting(meeting.id)}
                 disabled={!idle}
               >

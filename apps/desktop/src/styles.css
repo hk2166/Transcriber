@@ -29,6 +29,11 @@ button { cursor: pointer; font-family: inherit; color: inherit; }
   --record-glow: rgba(239, 68, 68, 0.35);
   --ok: #34d399;
   --ring: #2dd4bf;
+  --glass-bg: rgba(16, 27, 30, 0.58);          /* light material — interactive chrome */
+  --glass-bg-heavy: rgba(9, 17, 19, 0.72);     /* heavy material — structural regions */
+  --glass-tint: rgba(255, 255, 255, 0.03);     /* nested layer on glass: tint, no blur */
+  --glass-edge: rgba(255, 255, 255, 0.09);     /* light catching the top of the material */
+  --glass-blur: 24px;
   --radius: 10px;
   --radius-lg: 14px;
   --sidebar-width: 260px;
@@ -55,6 +60,10 @@ button { cursor: pointer; font-family: inherit; color: inherit; }
     --record-glow: rgba(220, 38, 38, 0.3);
     --ok: #0d9488;
     --ring: #0d9488;
+    --glass-bg: rgba(255, 255, 255, 0.55);
+    --glass-bg-heavy: rgba(240, 253, 250, 0.78);
+    --glass-tint: rgba(13, 148, 136, 0.04);
+    --glass-edge: rgba(255, 255, 255, 0.65);
     color-scheme: light;
   }
 }
@@ -73,12 +82,37 @@ body {
 /* Keyboard focus is always visible (pre-delivery checklist). */
 :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 
+/* Press feedback lives on pointer-down and is instant (Apple: response). */
+.settings__save:active, .settings__cancel:active, .settings__secondary:active,
+.confirm__btn:active, .engine-card__download:active, .summary__generate:active,
+.summary__regen:active, .source-warning__fix:active, .detect-banner__record:active,
+.detect-banner__dismiss:active, .topbar__delete:active, .export-menu__button:active,
+.tab:active, .settings__danger:active {
+  transform: scale(0.97);
+  transition: transform 100ms ease-out;
+}
+
 /* Icons inherit text color and never shrink in flex rows. */
 button svg,
 .app-mark svg { flex-shrink: 0; }
 
 /* ===== Layout ===== */
-.app { display: flex; height: 100%; overflow: hidden; }
+.app { display: flex; height: 100%; overflow: hidden; position: relative; isolation: isolate; }
+
+/* Ambient color field behind the glass — large, slow, GPU-only drift. */
+.app::before {
+  content: ""; position: absolute; inset: -20%; z-index: -1; pointer-events: none;
+  background:
+    radial-gradient(38% 45% at 18% 20%, rgba(45, 212, 191, 0.13), transparent 70%),
+    radial-gradient(32% 38% at 82% 12%, rgba(249, 115, 22, 0.07), transparent 70%),
+    radial-gradient(45% 50% at 70% 85%, rgba(45, 212, 191, 0.09), transparent 70%);
+  animation: ambient-drift 60s ease-in-out infinite alternate;
+  will-change: transform;
+}
+@keyframes ambient-drift {
+  from { transform: translate3d(-2%, -1%, 0) scale(1); }
+  to   { transform: translate3d(2%, 2%, 0) scale(1.06); }
+}
 
 .sidebar {
   width: var(--sidebar-width);
@@ -87,10 +121,11 @@ button svg,
   flex-direction: column;
   gap: 16px;
   padding: 20px 14px;
-  background: var(--bg-sidebar);
+  background: var(--glass-bg-heavy);
   -webkit-backdrop-filter: blur(30px) saturate(180%);
   backdrop-filter: blur(30px) saturate(180%);
   border-right: 1px solid var(--border);
+  box-shadow: inset 0 1px 0 var(--glass-edge);
 }
 
 .sidebar__header { display: flex; align-items: center; gap: 10px; padding: 4px; }
@@ -172,7 +207,13 @@ button svg,
   background: transparent;
   border: none;
   border-radius: 8px;
-  transition: background 120ms ease;
+  transition: background 120ms ease, transform 120ms ease-out;
+  animation: item-rise 0.35s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+  animation-delay: min(calc(var(--i, 0) * 26ms), 260ms);
+}
+@keyframes item-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
 }
 .meeting-item:hover:not(:disabled) { background: var(--bg-hover); }
 .meeting-item--active { background: var(--bg-hover); }
@@ -213,6 +254,10 @@ button.status-line--fix:disabled { cursor: default; opacity: 0.7; }
   display: flex; align-items: center; justify-content: space-between;
   padding: 18px 28px;
   border-bottom: 1px solid var(--border);
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(170%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(170%);
+  box-shadow: inset 0 1px 0 var(--glass-edge);
 }
 .topbar h2 { font-size: 17px; font-weight: 600; letter-spacing: -0.02em; }
 .topbar__delete {
@@ -457,9 +502,14 @@ button.status-line--fix:disabled { cursor: default; opacity: 0.7; }
 }
 .toast {
   padding: 10px 16px; font-size: 13px; font-weight: 500; color: var(--text-primary);
-  background: var(--bg-elevated); border: 1px solid var(--border);
-  border-radius: var(--radius); box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: blur(20px) saturate(170%);
+  backdrop-filter: blur(20px) saturate(170%);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  box-shadow: inset 0 1px 0 var(--glass-edge), 0 8px 24px rgba(0, 0, 0, 0.35);
   max-width: 400px;
+  animation: materialize 0.28s cubic-bezier(0.2, 0.7, 0.3, 1);
 }
 
 /* ===== Settings modal (Day 13) ===== */
@@ -480,9 +530,18 @@ button.status-line--fix:disabled { cursor: default; opacity: 0.7; }
 @keyframes confirm-fade { from { opacity: 0; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .confirm-backdrop { animation: none; } }
 .confirm {
-  background: var(--bg-elevated); border: 1px solid var(--border);
-  border-radius: var(--radius-lg); box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: blur(28px) saturate(170%);
+  backdrop-filter: blur(28px) saturate(170%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: inset 0 1px 0 var(--glass-edge), 0 20px 60px rgba(0, 0, 0, 0.4);
   padding: 20px; width: min(360px, calc(100vw - 48px));
+  animation: materialize 0.28s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+@keyframes materialize {
+  from { transform: scale(0.96); opacity: 0; }
+  to   { transform: scale(1); opacity: 1; }
 }
 .confirm__message { font-size: 14px; line-height: 1.5; color: var(--text-primary); margin: 0 0 16px; }
 .confirm__actions { display: flex; justify-content: flex-end; gap: 8px; }
@@ -504,8 +563,12 @@ button.status-line--fix:disabled { cursor: default; opacity: 0.7; }
 .modal {
   width: 440px; max-width: calc(100vw - 40px); max-height: calc(100vh - 40px);
   overflow-y: auto; padding: 24px;
-  background: var(--bg-elevated); border: 1px solid var(--border);
-  border-radius: var(--radius-lg); box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: blur(30px) saturate(170%);
+  backdrop-filter: blur(30px) saturate(170%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: inset 0 1px 0 var(--glass-edge), 0 24px 70px rgba(0, 0, 0, 0.45);
 }
 .modal__header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
 .modal__header h2 { font-size: 17px; font-weight: 600; }
@@ -729,7 +792,10 @@ button.status-line--fix:disabled { cursor: default; opacity: 0.7; }
   gap: 16px;
   padding: 20px 24px 24px;
   border-top: 1px solid var(--border);
-  background: var(--bg-base);
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(170%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(170%);
+  box-shadow: inset 0 1px 0 var(--glass-edge);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -839,8 +905,11 @@ button.status-line--fix:disabled { cursor: default; opacity: 0.7; }
   padding: 10px 14px;
   font-size: 13px;
   color: var(--text-secondary);
-  background: var(--bg-elevated);
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: blur(18px) saturate(170%);
+  backdrop-filter: blur(18px) saturate(170%);
   border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: inset 0 1px 0 var(--glass-edge);
 }
 .model-banner--error { border-color: var(--record); }
 .model-banner__bar {
@@ -1078,8 +1147,10 @@ summary:focus-visible,
 .engine-card {
   position: relative; display: flex; flex-direction: column;
   border: 1px solid var(--border); border-radius: var(--radius);
-  background: var(--bg-hover);
+  background: var(--glass-tint);
+  transition: transform 150ms ease-out, border-color 150ms ease, background 150ms ease;
 }
+.engine-card:hover { transform: translateY(-1px); border-color: var(--border-strong); }
 .engine-card--active { border-color: var(--accent); background: var(--bg-elevated); }
 .engine-card__pick {
   flex: 1; display: flex; flex-direction: column; gap: 2px; align-items: flex-start;
@@ -1104,3 +1175,23 @@ summary:focus-visible,
   border: none; border-radius: 999px; cursor: pointer;
 }
 .engine-card__download:hover { filter: brightness(1.1); }
+
+
+/* Reduced motion: gentle equivalents, never vestibular (apple-design §14). */
+@media (prefers-reduced-motion: reduce) {
+  .app::before { animation: none; }
+  .meeting-item { animation: none; }
+  .confirm, .toast { animation: confirm-fade 0.15s ease-out; }
+  .engine-card:hover { transform: none; }
+}
+
+/* Reduced transparency: frost the glass solid, keep the hierarchy. */
+@media (prefers-reduced-transparency: reduce) {
+  .sidebar, .topbar, .controlbar, .modal, .confirm, .toast,
+  .model-banner, .detect-banner {
+    background: var(--bg-elevated);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  .app::before { display: none; }
+}
