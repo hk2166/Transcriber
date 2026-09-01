@@ -38,6 +38,7 @@ __all__ = [
     "get_proposals",
     "get_segments",
     "get_segments_by_ids",
+    "get_segments_for_meetings",
     "get_speakers",
     "get_summary",
     "insert_proposals",
@@ -293,6 +294,33 @@ def get_segments(conn: sqlite3.Connection, meeting_id: int) -> list[Segment]:
     rows = conn.execute(
         "SELECT * FROM transcript_segments WHERE meeting_id = ? ORDER BY start_ms, id",
         (meeting_id,),
+    ).fetchall()
+    return [
+        Segment(
+            id=row["id"],
+            meeting_id=row["meeting_id"],
+            text=row["text"],
+            start_ms=row["start_ms"],
+            end_ms=row["end_ms"],
+            language=row["language"],
+            confidence=row["confidence"],
+            speaker_id=row["speaker_id"],
+        )
+        for row in rows
+    ]
+
+
+def get_segments_for_meetings(
+    conn: sqlite3.Connection, meeting_ids: Sequence[int]
+) -> list[Segment]:
+    """Segments across several meetings, in time order (a person's corpus)."""
+    if not meeting_ids:
+        return []
+    placeholders = ",".join("?" * len(meeting_ids))
+    rows = conn.execute(
+        f"SELECT * FROM transcript_segments WHERE meeting_id IN ({placeholders}) "
+        "ORDER BY meeting_id, start_ms, id",
+        list(meeting_ids),
     ).fetchall()
     return [
         Segment(

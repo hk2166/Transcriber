@@ -60,17 +60,38 @@ class VectorStore:
         self._meeting_ids = self._meeting_ids[keep]
         self._vectors = self._vectors[keep]
 
-    def search(self, query: np.ndarray, k: int = 10) -> list[SearchHit]:
-        """Top-``k`` segments by cosine similarity to ``query`` (a unit vector)."""
+    def search(
+        self,
+        query: np.ndarray,
+        k: int = 10,
+        meeting_ids: set[int] | None = None,
+    ) -> list[SearchHit]:
+        """Top-``k`` segments by cosine similarity to ``query`` (a unit vector).
+
+        ``meeting_ids`` scopes the search to those meetings — ``k`` applies
+        *within* the scope (top-k of meeting A, not global top-k minus the
+        rest). ``None`` searches everything, exactly as before; an empty set
+        explicitly matches nothing.
+        """
         if len(self) == 0:
             return []
-        scores = self._vectors @ query.astype(np.float32)
+        if meeting_ids is None:
+            indices = None
+            vectors = self._vectors
+        else:
+            mask = np.isin(self._meeting_ids, list(meeting_ids))
+            indices = np.flatnonzero(mask)
+            if len(indices) == 0:
+                return []
+            vectors = self._vectors[indices]
+        scores = vectors @ query.astype(np.float32)
         top = np.argsort(-scores)[:k]
+        rows = top if indices is None else indices[top]
         return [
             SearchHit(
-                int(self._seg_ids[i]), int(self._meeting_ids[i]), float(scores[i])
+                int(self._seg_ids[i]), int(self._meeting_ids[i]), float(scores[j])
             )
-            for i in top
+            for j, i in zip(top, rows)
         ]
 
     def save(self, path: Path | str) -> None:

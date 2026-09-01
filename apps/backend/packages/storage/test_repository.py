@@ -520,3 +520,21 @@ def test_merge_people_rejects_self_and_unknown(conn):
         merge_people(conn, person_id, person_id)
     with pytest.raises(ValueError):
         merge_people(conn, person_id, 9999)
+
+
+def test_get_segments_for_meetings_spans_meetings_in_order(conn):
+    a = create_meeting(conn, source="mic", wav_path=None,
+                       started_at=datetime(2026, 9, 1, 9, 0))
+    b = create_meeting(conn, source="mic", wav_path=None,
+                       started_at=datetime(2026, 9, 2, 9, 0))
+    other = create_meeting(conn, source="mic", wav_path=None,
+                           started_at=datetime(2026, 9, 3, 9, 0))
+    insert_segment(conn, a, text="a2", start_ms=2000, end_ms=3000, language="en", confidence=0.9)
+    insert_segment(conn, a, text="a1", start_ms=0, end_ms=1000, language="en", confidence=0.9)
+    insert_segment(conn, b, text="b1", start_ms=500, end_ms=900, language="en", confidence=0.9)
+    insert_segment(conn, other, text="noise", start_ms=0, end_ms=100, language="en", confidence=0.9)
+
+    from packages.storage import get_segments_for_meetings
+    segments = get_segments_for_meetings(conn, [a, b])
+    assert [s.text for s in segments] == ["a1", "a2", "b1"]  # time-ordered per meeting
+    assert get_segments_for_meetings(conn, []) == []

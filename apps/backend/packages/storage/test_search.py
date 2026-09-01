@@ -65,3 +65,47 @@ def test_embedder_semantic_ranking(embedder):
     budget = embedder.encode_one("we agreed the budget will increase next quarter")
     weather = embedder.encode_one("it might rain on the weekend")
     assert float(query @ budget) > float(query @ weather)
+
+
+# ---- meeting-scoped search (the person-prep read path) ------------------------
+
+
+def _two_meeting_store() -> VectorStore:
+    store = VectorStore(dim=2)
+    # Meeting 1 content points along x; meeting 2 along y.
+    store.add([10, 11], meeting_id=1, vectors=np.array([_unit([1, 0]), _unit([0.9, 0.1])]))
+    store.add([20, 21], meeting_id=2, vectors=np.array([_unit([0, 1]), _unit([0.1, 0.9])]))
+    return store
+
+
+def test_filter_excludes_other_meetings():
+    store = _two_meeting_store()
+    x_query = _unit([1, 0])  # unique to meeting 1's content
+    assert store.search(x_query, k=5, meeting_ids={2}) != []  # still ranks within 2
+    assert all(h.meeting_id == 2 for h in store.search(x_query, k=5, meeting_ids={2}))
+    hits = store.search(x_query, k=5, meeting_ids={1})
+    assert [h.segment_id for h in hits] == [10, 11]
+
+
+def test_k_applies_within_the_filtered_scope():
+    store = _two_meeting_store()
+    # Global top-1 for a y-query is in meeting 2 — but scoped to meeting 1,
+    # k=1 must still return meeting 1's best, not nothing.
+    hits = store.search(_unit([0, 1]), k=1, meeting_ids={1})
+    assert len(hits) == 1 and hits[0].meeting_id == 1
+
+
+def test_none_filter_matches_unfiltered_exactly():
+    store = _two_meeting_store()
+    query = _unit([0.6, 0.4])
+    plain = store.search(query, k=4)
+    scoped = store.search(query, k=4, meeting_ids=None)
+    assert [(h.segment_id, h.meeting_id, h.score) for h in plain] == [
+        (h.segment_id, h.meeting_id, h.score) for h in scoped
+    ]
+
+
+def test_empty_filter_set_matches_nothing():
+    store = _two_meeting_store()
+    assert store.search(_unit([1, 0]), k=5, meeting_ids=set()) == []
+    assert store.search(_unit([1, 0]), k=5, meeting_ids={99}) == []

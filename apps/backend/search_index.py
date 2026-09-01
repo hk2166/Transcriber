@@ -85,14 +85,38 @@ def _get_store() -> VectorStore:
     return _store
 
 
+#: Neighbours on each side folded into a segment's embedding text. Short VAD
+#: segments are semantically thin; embedding each with its overlapping context
+#: window retrieves markedly better while keeping one vector per segment id.
+CONTEXT_RADIUS = 1
+
+
+def _context_windows(texts: list[str], radius: int = CONTEXT_RADIUS) -> list[str]:
+    """One overlapping window per segment: the segment ± ``radius`` neighbours.
+
+    Consecutive windows share ``2 * radius`` segments, so retrieval sees
+    context, while the store keeps exactly one vector per segment (the window's
+    anchor). Edges clip naturally.
+    """
+    return [
+        " ".join(texts[max(0, i - radius) : i + radius + 1])
+        for i in range(len(texts))
+    ]
+
+
 def index_meeting(meeting_id: int) -> None:
-    """Embed a meeting's segments into the index (idempotent re-index)."""
+    """Embed a meeting's segments into the index (idempotent re-index).
+
+    Each segment is embedded with its overlapping neighbour window (see
+    ``_context_windows``) but keyed by its own id, so search hits map straight
+    back to a real segment.
+    """
     segments = get_segments(get_db(), meeting_id)
     if not segments:
         return
     embedder = _get_embedder()
     # Encoding is slow and touches nothing shared — keep it out of the lock.
-    vectors = embedder.encode([s.text for s in segments])
+    vectors = embedder.encode(_context_windows([s.text for s in segments]))
     with _write_lock:
         store = _get_store()
         store.remove_meeting(meeting_id)
@@ -118,10 +142,29 @@ def search(query: str, k: int = 10) -> list[SearchResult]:
         return []
     embedder = _get_embedder()
     store = _get_store()
-    hits = store.search(embedder.encode_one(text), k=k)
+    return _to_results(store.search(embedder.encode_one(text), k=k))
+
+
+def search_meetings(
+    query: str, meeting_ids: set[int], k: int = 10
+) -> list[SearchResult]:
+    """Top-``k`` segments within ``meeting_ids`` only — persisted vectors, no
+    re-embedding. The scoped read path for person-level prep: same result
+    shape as :func:`search`, ranked inside the scope."""
+    text = query.strip()
+    if not text or not meeting_ids:
+        return []
+    embedder = _get_embedder()
+    store = _get_store()
+    return _to_results(
+        store.search(embedder.encode_one(text), k=k, meeting_ids=meeting_ids)
+    )
+
+
+def _to_results(hits) -> list[SearchResult]:
+    """Map raw store hits to :class:`SearchResult`s (shared by both searches)."""
     if not hits:
         return []
-
     db = get_db()
     segments = get_segments_by_ids(db, [h.segment_id for h in hits])
     titles: dict[int, str] = {}
