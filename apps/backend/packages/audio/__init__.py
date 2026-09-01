@@ -8,8 +8,10 @@ a non-blocking WAV session recorder.
 from packages.audio.capture import AudioCapture, MicrophoneCapture, SystemAudioCapture
 from packages.audio.mixer import MixedAudioCapture
 from packages.audio.recorder import SessionRecorder, default_recordings_dir
+from packages.audio import routing
 
 __all__ = [
+    "routing",
     "AudioCapture",
     "MicrophoneCapture",
     "MixedAudioCapture",
