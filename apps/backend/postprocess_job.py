@@ -8,6 +8,7 @@ diarization needs torch, summaries need Ollama, and the app must still work
 from __future__ import annotations
 
 import asyncio
+import gc
 import logging
 import threading
 
@@ -79,6 +80,19 @@ def _get_refine_transcriber(model_size: str):
             _refine_transcriber = WhisperTranscriber(model_size=model_size)
             _refine_model_size = model_size
     return _refine_transcriber
+
+
+def _release_refine_transcriber() -> None:
+    """Drop the refine Whisper so it isn't resident while the next model loads.
+
+    faster-whisper (CTranslate2) returns this memory to the OS on release —
+    unlike PyTorch — so freeing the refine pass's ~0.5-3 GB before the diarizer
+    loads is a real co-residency win on low-memory machines."""
+    global _refine_transcriber, _refine_model_size
+    with _refine_lock:
+        _refine_transcriber = None
+        _refine_model_size = None
+    gc.collect()
 
 
 async def _refine(meeting_id: int, wav_path: str) -> bool:
@@ -176,6 +190,8 @@ async def run_postprocess(meeting_id: int, wav_path: str) -> None:
     # reconciliation resuming a backlog — run one at a time instead of loading
     # every model at once and exhausting memory.
     async with model_gate.slot(f"postprocess:{meeting_id}"):
+        # Each stage loads a heavy model; release it before the next loads so
+        # only one is resident at a time (crash guard on low-memory machines).
         # Re-transcribe the whole recording for a cleaner transcript, then
         # diarize the *refined* text. Runs first so everything builds on it.
         if get_settings().refine_transcript:
@@ -184,11 +200,18 @@ async def run_postprocess(meeting_id: int, wav_path: str) -> None:
                     segments = get_segments(db, meeting_id)
             except Exception:
                 logger.exception("Transcript refine failed for meeting %d.", meeting_id)
+            finally:
+                # Free the refine Whisper before the diarizer loads on top of it.
+                await asyncio.to_thread(_release_refine_transcriber)
 
         try:
             await _diarize(meeting_id, wav_path, segments)
         except Exception:
             logger.exception("Diarization failed for meeting %d.", meeting_id)
+        # The diarizer is deliberately NOT released here: in dev it's PyTorch,
+        # whose allocator never returns RSS to the OS (measured), so releasing
+        # only forces a costly reload; in the packaged app diarization runs in a
+        # subprocess that frees on exit anyway.
 
         # Reload so the transcript carries the speaker attributions just written.
         segments = get_segments(db, meeting_id)
@@ -200,13 +223,15 @@ async def run_postprocess(meeting_id: int, wav_path: str) -> None:
         except Exception:
             logger.exception("Summary failed for meeting %d.", meeting_id)
 
-        try:
-            # Lazy import keeps the embedder off the live-capture import path.
-            import search_index
+        # Lazy import keeps the embedder off the live-capture import path.
+        import search_index
 
+        try:
             await asyncio.to_thread(search_index.index_meeting, meeting_id)
         except Exception:
             logger.exception("Indexing failed for meeting %d.", meeting_id)
+        finally:
+            await asyncio.to_thread(search_index.release_embedder)
 
     await _propose_sync(meeting_id)
 

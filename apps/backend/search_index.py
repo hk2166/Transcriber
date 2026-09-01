@@ -8,6 +8,7 @@ vectors without needing the (heavier) embedder.
 
 from __future__ import annotations
 
+import gc
 import logging
 import threading
 from dataclasses import dataclass
@@ -56,6 +57,17 @@ def _get_embedder() -> Embedder:
 def get_embedder() -> Embedder:
     """Public accessor for the shared embedder (reused by RAG chat)."""
     return _get_embedder()
+
+
+def release_embedder() -> None:
+    """Drop the cached embedder to free memory (reloads on next use).
+
+    Used by post-processing so the ONNX embedder isn't held resident after
+    indexing on low-memory machines."""
+    global _embedder
+    with _lock:
+        _embedder = None
+    gc.collect()
 
 
 def reset() -> None:
