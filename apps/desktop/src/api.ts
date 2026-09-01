@@ -301,6 +301,13 @@ export function getMeetings(): Promise<Meeting[]> {
   return getJson<Meeting[]>("/meetings");
 }
 
+/** Permanently delete one meeting — recording, transcript, and summary. */
+export async function deleteMeeting(id: number): Promise<{ deleted: boolean }> {
+  const res = await fetch(`${API_BASE}/meetings/${id}`, { method: "DELETE" });
+  if (!res.ok) throw new ApiError(res.status, res.statusText);
+  return (await res.json()) as { deleted: boolean };
+}
+
 export function searchSegments(query: string): Promise<SearchResult[]> {
   return postJson<SearchResult[]>("/search", { query, k: 20 });
 }

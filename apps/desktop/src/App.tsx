@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, MotionConfig } from "framer-motion";
 
 import {
+  deleteMeeting,
   enableAudioRouting,
   getAudioRouting,
   getMeetingApp,
@@ -27,12 +28,14 @@ import {
 } from "./api";
 import { ActionItems } from "./ActionItems";
 import { APP_NAME } from "./config";
+import { confirmDialog } from "./confirm";
 import { DetectBanner } from "./DetectBanner";
 import {
   IconPlus,
   IconSearch,
   IconSettings,
   IconTasks,
+  IconTrash,
   IconWaveform,
 } from "./Icons";
 import { ExportMenu } from "./ExportMenu";
@@ -433,6 +436,24 @@ function App() {
 
   const selectedMeeting = meetings.find((m) => m.id === selectedId) ?? null;
   const viewingPast = selectedMeeting !== null;
+
+  const handleDeleteMeeting = async () => {
+    if (!selectedMeeting) return;
+    const ok = await confirmDialog({
+      message: `Delete “${selectedMeeting.title}”? The recording, transcript, and summary are permanently removed.`,
+      confirmLabel: "Delete meeting",
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await deleteMeeting(selectedMeeting.id);
+      setSelectedId(null); // back to the record screen
+      await refreshMeetings();
+      toast("Meeting deleted.");
+    } catch {
+      toast("Couldn't delete the meeting.");
+    }
+  };
   const pendingProposals = pastProposals.filter(
     (p) => p.status === "proposed" || p.status === "failed",
   ).length;
@@ -661,6 +682,14 @@ function App() {
                   meetingId={selectedMeeting.id}
                   title={selectedMeeting.title}
                 />
+                <button
+                  className="topbar__delete"
+                  onClick={handleDeleteMeeting}
+                  aria-label="Delete meeting"
+                  title="Delete this meeting"
+                >
+                  <IconTrash size={15} />
+                </button>
               </div>
             </header>
             {meetingTab === "transcript" &&

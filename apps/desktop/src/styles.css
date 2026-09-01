@@ -200,6 +200,14 @@ button.status-line--fix:disabled { cursor: default; opacity: 0.7; }
   border-bottom: 1px solid var(--border);
 }
 .topbar h2 { font-size: 17px; font-weight: 600; letter-spacing: -0.02em; }
+.topbar__delete {
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 6px 8px; border-radius: 8px;
+  color: var(--text-secondary); background: transparent;
+  border: 1px solid var(--border);
+  transition: color 120ms ease, border-color 120ms ease;
+}
+.topbar__delete:hover { color: var(--record); border-color: var(--record); }
 .topbar__sub { font-size: 13px; color: var(--text-secondary); }
 .elapsed {
   font-size: 15px; font-variant-numeric: tabular-nums;
