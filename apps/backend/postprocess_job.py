@@ -23,6 +23,7 @@ from packages.intelligence import (
 from packages.storage import (
     Segment,
     create_speakers,
+    get_meeting,
     get_meetings,
     get_segments,
     get_speakers,
@@ -233,10 +234,59 @@ async def run_postprocess(meeting_id: int, wav_path: str) -> None:
         finally:
             await asyncio.to_thread(search_index.release_embedder)
 
+    await _link_calendar_attendees(meeting_id)
     await _propose_sync(meeting_id)
 
     set_meeting_status(db, meeting_id, "ready")
     logger.info("Post-processing complete for meeting %d.", meeting_id)
+
+
+async def _link_calendar_attendees(meeting_id: int) -> None:
+    """Match the recording to its calendar event and link attendees as People.
+
+    Best-effort like every other stage: no Google connected → silent skip;
+    any other failure is logged and never blocks ``ready``. No models load
+    here, so it runs outside the model gate.
+    """
+    from datetime import datetime, timedelta
+
+    import google_calendar
+    import google_service
+    from packages.integrations.google_oauth import GoogleAuthError
+
+    try:
+        meeting = get_meeting(get_db(), meeting_id)
+        if meeting is None:
+            return
+        started = datetime.fromisoformat(meeting.started_at)
+        ended = (
+            datetime.fromisoformat(meeting.ended_at)
+            if meeting.ended_at
+            else started + timedelta(hours=1)
+        )
+        events = await asyncio.to_thread(
+            google_calendar.fetch_events,
+            started - timedelta(hours=2),
+            ended + timedelta(hours=2),
+        )
+        event = google_calendar.best_match(events, started, ended)
+        if event is None:
+            logger.info("Meeting %d: no unambiguous calendar match.", meeting_id)
+            return
+        self_email = google_service.status().get("email")
+        linked = await asyncio.to_thread(
+            google_calendar.ingest_attendees,
+            get_db(), meeting_id, event, self_email,
+        )
+        logger.info(
+            "Meeting %d: matched calendar event %r — linked %d attendee(s).",
+            meeting_id, event.title, linked,
+        )
+    except GoogleAuthError:
+        logger.debug("Meeting %d: Google not connected — skipping calendar link.",
+                     meeting_id)
+    except Exception:
+        logger.exception("Calendar attendee link failed for meeting %d.", meeting_id)
 
 
 async def _propose_sync(meeting_id: int) -> None:
