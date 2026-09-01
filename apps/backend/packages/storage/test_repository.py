@@ -5,23 +5,31 @@ from datetime import datetime
 import pytest
 
 from packages.storage import (
+    add_meeting_attendee,
     connect,
     create_meeting,
     create_speakers,
     delete_meeting,
     end_meeting,
     get_meeting,
+    get_meeting_ids_for_person,
     get_meetings,
+    get_people,
+    get_person,
     get_segments,
     get_speakers,
     get_summary,
     insert_segment,
+    link_speaker_to_person,
+    merge_people,
     rename_speaker,
     replace_segments,
     save_summary,
     set_meeting_status,
     set_meeting_title,
+    set_person_notes,
     set_segment_speaker,
+    upsert_person_by_email,
 )
 
 
@@ -361,3 +369,154 @@ def test_proposals_cascade_on_meeting_delete(conn):
     meeting_id = _seed_proposals(conn)
     delete_meeting(conn, meeting_id)
     assert get_proposals(conn, meeting_id) == []
+
+
+# ---- People (cross-meeting identity) ----------------------------------------
+
+
+def test_upsert_person_dedupes_by_email_case_insensitively(conn):
+    a = upsert_person_by_email(conn, "Sarah@x.com", display_name="Sarah")
+    b = upsert_person_by_email(conn, "sarah@x.com")
+    assert a == b
+    assert len(get_people(conn)) == 1
+    person = get_person(conn, a)
+    assert person.display_name == "Sarah"
+    assert person.primary_email == "sarah@x.com"  # stored lowercased
+
+
+def test_upsert_fills_missing_name_but_never_overwrites(conn):
+    person_id = upsert_person_by_email(conn, "dana@x.com")
+    assert get_person(conn, person_id).display_name is None
+    upsert_person_by_email(conn, "dana@x.com", display_name="Dana R.")
+    assert get_person(conn, person_id).display_name == "Dana R."
+    upsert_person_by_email(conn, "dana@x.com", display_name="Impostor")
+    assert get_person(conn, person_id).display_name == "Dana R."
+
+
+def test_attendee_links_cascade_on_meeting_delete_but_person_survives(conn):
+    meeting_id = _new_meeting(conn)
+    person_id = upsert_person_by_email(conn, "sam@x.com")
+    add_meeting_attendee(conn, meeting_id, person_id)
+    assert get_meeting_ids_for_person(conn, person_id) == [meeting_id]
+
+    delete_meeting(conn, meeting_id)
+    assert get_meeting_ids_for_person(conn, person_id) == []
+    person = get_person(conn, person_id)  # the person themselves survives
+    assert person is not None
+    assert person.meeting_count == 0
+
+
+def test_people_carry_meeting_count_and_last_met(conn):
+    early = create_meeting(conn, source="mic", wav_path=None,
+                           started_at=datetime(2026, 8, 14, 9, 0))
+    late = create_meeting(conn, source="mic", wav_path=None,
+                          started_at=datetime(2026, 8, 20, 15, 0))
+    person_id = upsert_person_by_email(conn, "amy@x.com")
+    add_meeting_attendee(conn, early, person_id)
+    add_meeting_attendee(conn, late, person_id)
+    add_meeting_attendee(conn, late, person_id)  # idempotent
+
+    person = get_person(conn, person_id)
+    assert person.meeting_count == 2
+    assert person.last_met == datetime(2026, 8, 20, 15, 0).isoformat()
+    assert get_meeting_ids_for_person(conn, person_id) == [late, early]
+
+
+def test_link_speaker_to_person_bridge(conn):
+    meeting_id = _new_meeting(conn)
+    mapping = create_speakers(conn, meeting_id, ["SPEAKER_00"])
+    person_id = upsert_person_by_email(conn, "ravi@x.com")
+
+    assert link_speaker_to_person(conn, mapping["SPEAKER_00"], person_id) is True
+    assert get_speakers(conn, meeting_id)[0].person_id == person_id
+    assert link_speaker_to_person(conn, mapping["SPEAKER_00"], None) is True
+    assert get_speakers(conn, meeting_id)[0].person_id is None
+    assert link_speaker_to_person(conn, 9999, person_id) is False
+
+
+def test_notes_survive_relinking(conn):
+    meeting_id = _new_meeting(conn)
+    person_id = upsert_person_by_email(conn, "kim@x.com")
+    add_meeting_attendee(conn, meeting_id, person_id)
+    assert set_person_notes(conn, person_id, "prefers async") is True
+
+    # Unlink and re-link the meeting — the human-authored notes must persist.
+    delete_meeting(conn, meeting_id)
+    fresh = _new_meeting(conn)
+    add_meeting_attendee(conn, fresh, person_id, source="manual")
+    assert get_person(conn, person_id).notes == "prefers async"
+
+
+def test_merge_people_repoints_everything(conn):
+    shared = _new_meeting(conn)
+    only_b = create_meeting(conn, source="mic", wav_path=None,
+                            started_at=datetime(2026, 8, 15, 9, 0))
+    keep = upsert_person_by_email(conn, "sarah@x.com", display_name="Sarah")
+    drop = upsert_person_by_email(conn, "sarah@personal.com")
+    set_person_notes(conn, keep, "keep note")
+    set_person_notes(conn, drop, "drop note")
+    # Both attended the shared meeting (the PK-collision edge); drop also
+    # attended one alone, and owns a speaker bridge.
+    add_meeting_attendee(conn, shared, keep)
+    add_meeting_attendee(conn, shared, drop)
+    add_meeting_attendee(conn, only_b, drop)
+    mapping = create_speakers(conn, only_b, ["SPEAKER_00"])
+    link_speaker_to_person(conn, mapping["SPEAKER_00"], drop)
+
+    merge_people(conn, keep, drop)
+
+    assert get_person(conn, drop) is None
+    merged = get_person(conn, keep)
+    assert merged.meeting_count == 2  # shared collapsed, only_b repointed
+    assert merged.notes == "keep note\n\ndrop note"
+    assert merged.display_name == "Sarah"
+    assert get_speakers(conn, only_b)[0].person_id == keep
+    # Both emails now resolve to the surviving person.
+    assert upsert_person_by_email(conn, "sarah@personal.com") == keep
+    assert merged.primary_email == "sarah@x.com"  # keep's primary stays primary
+
+
+def test_merge_people_rolls_back_atomically_on_failure(conn):
+    class _FailsOnDelete:
+        """Delegates to the real connection, raising on the final DELETE —
+        proving the whole merge unwinds instead of half-applying."""
+
+        def __init__(self, real):
+            self._real = real
+
+        def __enter__(self):
+            self._real.__enter__()
+            return self
+
+        def __exit__(self, *exc):
+            return self._real.__exit__(*exc)
+
+        def execute(self, sql, *args):
+            if sql.startswith("DELETE FROM people"):
+                raise RuntimeError("boom")
+            return self._real.execute(sql, *args)
+
+    keep = upsert_person_by_email(conn, "a@x.com", display_name="A")
+    drop = upsert_person_by_email(conn, "b@x.com", display_name="B")
+    meeting_id = _new_meeting(conn)
+    add_meeting_attendee(conn, meeting_id, drop)
+    set_person_notes(conn, keep, "keep")
+    set_person_notes(conn, drop, "drop")
+
+    with pytest.raises(RuntimeError):
+        merge_people(_FailsOnDelete(conn), keep, drop)
+
+    # Everything rolled back: both people intact, links un-repointed.
+    assert get_person(conn, drop) is not None
+    assert get_person(conn, keep).notes == "keep"
+    assert get_meeting_ids_for_person(conn, drop) == [meeting_id]
+    assert get_meeting_ids_for_person(conn, keep) == []
+    assert upsert_person_by_email(conn, "b@x.com") == drop
+
+
+def test_merge_people_rejects_self_and_unknown(conn):
+    person_id = upsert_person_by_email(conn, "solo@x.com")
+    with pytest.raises(ValueError):
+        merge_people(conn, person_id, person_id)
+    with pytest.raises(ValueError):
+        merge_people(conn, person_id, 9999)
