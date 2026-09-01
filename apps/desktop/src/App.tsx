@@ -509,8 +509,36 @@ function App() {
         </nav>
 
         <div className="sidebar__footer">
-          <span className={"dot " + (connected ? "dot--ok" : "dot--off")} />
-          {connected ? "Backend connected" : "Backend offline"}
+          <div className="sidebar__status">
+            <div className="status-line">
+              <span className={"dot " + (connected ? "dot--ok" : "dot--off")} />
+              {connected ? "Backend connected" : "Backend offline"}
+            </div>
+            {routing !== null &&
+              (routing.blackhole_present && !routing.routed ? (
+                <button
+                  className="status-line status-line--fix"
+                  onClick={fixRouting}
+                  disabled={fixingRouting}
+                  title={`Sound is going to ${routing.output_name ?? "another device"} — click to route it through Confab too.`}
+                >
+                  <span className="dot dot--off" />
+                  {fixingRouting ? "Routing system audio…" : "System audio off — fix"}
+                </button>
+              ) : (
+                <div
+                  className="status-line"
+                  title={routing.output_name ?? undefined}
+                >
+                  <span
+                    className={"dot " + (routing.routed ? "dot--ok" : "dot--off")}
+                  />
+                  {routing.routed
+                    ? "System audio ready"
+                    : "System audio not installed"}
+                </div>
+              ))}
+          </div>
           <button
             className="sidebar__settings"
             onClick={() => setShowSettings(true)}
