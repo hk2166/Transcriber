@@ -119,34 +119,30 @@ export function EngineSelector() {
         return (
           <div
             key={engine.id}
-            className={"engine-row" + (isActive ? " engine-row--active" : "")}
+            className={"engine-card" + (isActive ? " engine-card--active" : "")}
           >
+            {isActive && <span className="engine-card__active">Active</span>}
             <button
-              className="engine-row__pick"
+              className="engine-card__pick"
               onClick={() => switchTo(engine)}
               disabled={switching}
+              title={`${engine.note} · ${langs}`}
             >
-              <span className="engine-row__radio" aria-hidden />
-              <span className="engine-row__text">
-                <span className="engine-row__label">
-                  {engine.label}
-                  {isActive && <span className="engine-row__active">Active</span>}
-                </span>
-                <span className="engine-row__meta">
-                  {engine.note} · {langs} · ~{engine.size_mb} MB
-                </span>
+              <span className="engine-card__label">{engine.label}</span>
+              <span className="engine-card__meta">
+                {langs} · ~{engine.size_mb} MB
               </span>
             </button>
-            <span className="engine-row__status">
+            <span className="engine-card__status">
               {pct !== undefined ? (
-                <span className="engine-row__downloading">
+                <span className="engine-card__downloading">
                   Downloading… {Math.round(pct * 100)}%
                 </span>
               ) : engine.downloaded ? (
-                <span className="engine-row__done">Downloaded ✓</span>
+                <span className="engine-card__done">Downloaded ✓</span>
               ) : (
                 <button
-                  className="engine-row__download"
+                  className="engine-card__download"
                   onClick={() => download(engine.id)}
                 >
                   Download
