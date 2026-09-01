@@ -11,6 +11,7 @@ import asyncio
 import logging
 import threading
 
+import model_gate
 from database import get_db
 from packages.diarization import SpeakerDiarizer, assign_speaker
 from packages.intelligence import (
@@ -170,37 +171,42 @@ async def run_postprocess(meeting_id: int, wav_path: str) -> None:
         set_meeting_status(db, meeting_id, "ready")
         return
 
-    # Re-transcribe the whole recording for a cleaner transcript, then diarize
-    # the *refined* text. Runs first so everything downstream builds on it.
-    if get_settings().refine_transcript:
+    # Everything below loads heavy models (refine Whisper, diarizer, embedder).
+    # Hold one model slot so concurrent post-processing jobs — e.g. the startup
+    # reconciliation resuming a backlog — run one at a time instead of loading
+    # every model at once and exhausting memory.
+    async with model_gate.slot(f"postprocess:{meeting_id}"):
+        # Re-transcribe the whole recording for a cleaner transcript, then
+        # diarize the *refined* text. Runs first so everything builds on it.
+        if get_settings().refine_transcript:
+            try:
+                if await _refine(meeting_id, wav_path):
+                    segments = get_segments(db, meeting_id)
+            except Exception:
+                logger.exception("Transcript refine failed for meeting %d.", meeting_id)
+
         try:
-            if await _refine(meeting_id, wav_path):
-                segments = get_segments(db, meeting_id)
+            await _diarize(meeting_id, wav_path, segments)
         except Exception:
-            logger.exception("Transcript refine failed for meeting %d.", meeting_id)
+            logger.exception("Diarization failed for meeting %d.", meeting_id)
 
-    try:
-        await _diarize(meeting_id, wav_path, segments)
-    except Exception:
-        logger.exception("Diarization failed for meeting %d.", meeting_id)
+        # Reload so the transcript carries the speaker attributions just written.
+        segments = get_segments(db, meeting_id)
+        try:
+            if get_settings().auto_summarize:
+                await _summarize(meeting_id, segments)
+        except OllamaUnavailable:
+            logger.warning("Ollama unavailable — no summary for meeting %d.", meeting_id)
+        except Exception:
+            logger.exception("Summary failed for meeting %d.", meeting_id)
 
-    # Reload so the transcript carries the speaker attributions we just wrote.
-    segments = get_segments(db, meeting_id)
-    try:
-        if get_settings().auto_summarize:
-            await _summarize(meeting_id, segments)
-    except OllamaUnavailable:
-        logger.warning("Ollama unavailable — no summary for meeting %d.", meeting_id)
-    except Exception:
-        logger.exception("Summary failed for meeting %d.", meeting_id)
+        try:
+            # Lazy import keeps the embedder off the live-capture import path.
+            import search_index
 
-    try:
-        # Lazy import keeps the embedder off the live-capture import path.
-        import search_index
-
-        await asyncio.to_thread(search_index.index_meeting, meeting_id)
-    except Exception:
-        logger.exception("Indexing failed for meeting %d.", meeting_id)
+            await asyncio.to_thread(search_index.index_meeting, meeting_id)
+        except Exception:
+            logger.exception("Indexing failed for meeting %d.", meeting_id)
 
     await _propose_sync(meeting_id)
 
