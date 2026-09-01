@@ -20,6 +20,7 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
+import keychain
 from packages.integrations import google_oauth
 from packages.integrations.google_oauth import GoogleAuthError
 from settings import get_settings, save_settings
@@ -46,38 +47,19 @@ _PENDING_TTL = 600  # seconds
 
 
 # --- Keychain (with settings fallback) ---------------------------------------
+# Thin named wrappers over the shared keychain module — kept as module
+# attributes so tests (and only tests) can swap them for an in-memory store.
 
 def _keychain_set(account: str, value: str) -> bool:
-    try:
-        subprocess.run(
-            ["security", "add-generic-password", "-U", "-s", _SERVICE,
-             "-a", account, "-w", value],
-            capture_output=True, check=True, timeout=10,
-        )
-        return True
-    except Exception:
-        return False
+    return keychain.set_secret(_SERVICE, account, value)
 
 
 def _keychain_get(account: str) -> str | None:
-    try:
-        result = subprocess.run(
-            ["security", "find-generic-password", "-s", _SERVICE, "-a", account, "-w"],
-            capture_output=True, text=True, timeout=10,
-        )
-        return result.stdout.strip() if result.returncode == 0 else None
-    except Exception:
-        return None
+    return keychain.get_secret(_SERVICE, account)
 
 
 def _keychain_delete(account: str) -> None:
-    try:
-        subprocess.run(
-            ["security", "delete-generic-password", "-s", _SERVICE, "-a", account],
-            capture_output=True, timeout=10,
-        )
-    except Exception:
-        pass
+    keychain.delete_secret(_SERVICE, account)
 
 
 def _store(account: str, value: str) -> None:
