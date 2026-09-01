@@ -7,6 +7,7 @@ functions do typed CRUD over it.
 from packages.storage.db import connect
 from packages.storage.repository import (
     ActionItem,
+    CalendarEventRow,
     Meeting,
     Person,
     Proposal,
@@ -19,6 +20,7 @@ from packages.storage.repository import (
     delete_meeting,
     end_meeting,
     get_action_items,
+    get_calendar_event_for_meeting,
     get_meeting,
     get_meeting_ids_for_person,
     get_meetings,
@@ -48,11 +50,13 @@ from packages.storage.repository import (
     set_segment_speaker,
     update_proposal,
     update_segment_text,
+    upsert_calendar_event,
     upsert_person_by_email,
 )
 
 __all__ = [
     "ActionItem",
+    "CalendarEventRow",
     "Meeting",
     "Proposal",
     "Segment",
@@ -64,6 +68,7 @@ __all__ = [
     "delete_meeting",
     "end_meeting",
     "get_action_items",
+    "get_calendar_event_for_meeting",
     "get_meeting",
     "get_meetings",
     "get_proposal",

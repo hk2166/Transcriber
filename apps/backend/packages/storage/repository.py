@@ -15,6 +15,7 @@ from datetime import datetime
 
 __all__ = [
     "ActionItem",
+    "CalendarEventRow",
     "Meeting",
     "Person",
     "Proposal",
@@ -27,6 +28,7 @@ __all__ = [
     "delete_meeting",
     "end_meeting",
     "get_action_items",
+    "get_calendar_event_for_meeting",
     "get_meeting",
     "get_meeting_ids_for_person",
     "get_meetings",
@@ -56,6 +58,7 @@ __all__ = [
     "set_segment_speaker",
     "update_proposal",
     "update_segment_text",
+    "upsert_calendar_event",
     "upsert_person_by_email",
 ]
 
@@ -117,6 +120,19 @@ class Person:
     meeting_count: int
     last_met: str | None  # started_at of the most recent linked meeting
     created_at: str
+
+
+@dataclass
+class CalendarEventRow:
+    """A cached Google Calendar event (the attendee-identity anchor)."""
+
+    event_id: str
+    title: str | None
+    start_iso: str
+    end_iso: str
+    attendees: list[dict]  # [{email, display_name, response_status}, …]
+    meeting_id: int | None
+    fetched_at: str
 
 
 @dataclass
@@ -713,6 +729,55 @@ def link_speaker_to_person(
     )
     conn.commit()
     return cursor.rowcount > 0
+
+
+def upsert_calendar_event(
+    conn: sqlite3.Connection,
+    *,
+    event_id: str,
+    title: str | None,
+    start_iso: str,
+    end_iso: str,
+    attendees: list[dict],
+    meeting_id: int | None = None,
+) -> None:
+    """Cache (or refresh) a calendar event; re-fetches update in place.
+
+    A ``meeting_id`` records which recording the event was time-matched to;
+    passing ``None`` on a refresh keeps any existing link.
+    """
+    conn.execute(
+        "INSERT INTO calendar_events "
+        "(event_id, title, start_iso, end_iso, attendees_json, meeting_id) "
+        "VALUES (?, ?, ?, ?, ?, ?) "
+        "ON CONFLICT(event_id) DO UPDATE SET "
+        "title = excluded.title, start_iso = excluded.start_iso, "
+        "end_iso = excluded.end_iso, attendees_json = excluded.attendees_json, "
+        "meeting_id = COALESCE(excluded.meeting_id, calendar_events.meeting_id), "
+        "fetched_at = datetime('now')",
+        (event_id, title, start_iso, end_iso, json.dumps(attendees), meeting_id),
+    )
+    conn.commit()
+
+
+def get_calendar_event_for_meeting(
+    conn: sqlite3.Connection, meeting_id: int
+) -> CalendarEventRow | None:
+    """The calendar event a meeting was matched to, or ``None``."""
+    row = conn.execute(
+        "SELECT * FROM calendar_events WHERE meeting_id = ?", (meeting_id,)
+    ).fetchone()
+    if row is None:
+        return None
+    return CalendarEventRow(
+        event_id=row["event_id"],
+        title=row["title"],
+        start_iso=row["start_iso"],
+        end_iso=row["end_iso"],
+        attendees=json.loads(row["attendees_json"] or "[]"),
+        meeting_id=row["meeting_id"],
+        fetched_at=row["fetched_at"],
+    )
 
 
 def merge_people(conn: sqlite3.Connection, keep_id: int, drop_id: int) -> None:
