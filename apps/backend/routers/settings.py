@@ -27,9 +27,26 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["settings"])
 
 
+def _redacted(s: Settings) -> Settings:
+    """Never hand raw API keys to the client — only presence.
+
+    Every non-empty entry (Keychain sentinel, legacy plaintext, or a
+    ``_google_*`` fallback) comes back as the sentinel; the UI's password
+    fields show a masked placeholder, and PUTting the sentinel back means
+    "unchanged" (save_settings preserves the stored value)."""
+    return s.model_copy(
+        update={
+            "api_keys": {
+                k: (settings_module.KEY_SENTINEL if v else "")
+                for k, v in s.api_keys.items()
+            }
+        }
+    )
+
+
 @router.get("/settings")
 def read_settings() -> Settings:
-    return get_settings()
+    return _redacted(get_settings())
 
 
 @router.put("/settings")
@@ -43,7 +60,7 @@ def update_settings(new: Settings) -> Settings:
 
         sessions.reset_transcriber()
         logger.info("Transcription engine → %s (transcriber reset).", new.transcription_engine)
-    return saved
+    return _redacted(saved)
 
 
 class SystemStatus(BaseModel):

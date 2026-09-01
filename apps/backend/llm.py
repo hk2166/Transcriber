@@ -7,7 +7,7 @@ provider/model/key in Settings changes every AI feature at once.
 from __future__ import annotations
 
 from packages.intelligence import make_client
-from settings import Settings, get_settings
+from settings import Settings, get_settings, resolve_api_key
 
 __all__ = ["client_for", "current_client"]
 
@@ -19,7 +19,9 @@ def client_for(settings: Settings):
     return make_client(
         settings.llm_provider,
         model=settings.llm_model,
-        api_key=settings.api_keys.get(settings.llm_provider, ""),
+        # Keychain-resolved: the stored sentinel becomes the real key; a raw
+        # just-typed value (e.g. /llm/test before saving) passes through.
+        api_key=resolve_api_key(settings, settings.llm_provider),
         base_url=settings.llm_base_url,
     )
 

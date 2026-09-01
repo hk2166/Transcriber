@@ -15,12 +15,18 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+import keychain
 from packages.audio import default_recordings_dir
 
 logger = logging.getLogger(__name__)
 
 _lock = threading.Lock()
 _cached: Settings | None = None
+
+#: Keychain service that holds LLM provider API keys (account = provider id).
+LLM_KEYCHAIN_SERVICE = "com.hemant.confab.llm"
+#: What settings.json stores in place of a key that lives in the Keychain.
+KEY_SENTINEL = "keychain"
 
 
 class Settings(BaseModel):
@@ -53,8 +59,12 @@ class Settings(BaseModel):
     llm_model: str = ""
     #: Server URL for the "custom" (OpenAI-compatible) provider.
     llm_base_url: str = ""
-    #: Per-provider API keys, e.g. {"openai": "sk-…"}. Stored in settings.json
-    #: (chmod 600) — local single-user app.
+    #: Per-provider API keys. Real values live in the macOS Keychain
+    #: (LLM_KEYCHAIN_SERVICE, account = provider id); settings.json holds only
+    #: the KEY_SENTINEL marker. A raw value here is the graceful fallback for
+    #: when the Keychain refuses (headless/locked) — plus the ``_google_*``
+    #: entries google_service uses for the same reason. Resolve real values
+    #: through :func:`resolve_api_key`, never by reading this dict directly.
     api_keys: dict[str, str] = {}
 
 
@@ -77,6 +87,8 @@ def get_settings() -> Settings:
                     if "transcription_engine" not in data and data.get("whisper_model"):
                         data["transcription_engine"] = f"whisper-{data['whisper_model']}"
                     _cached = Settings.model_validate(data)
+                    # One-time: move any plaintext API keys into the Keychain.
+                    _cached = _migrate_plaintext_keys(_cached, path)
                 except Exception:
                     logger.exception("Bad settings.json — using defaults.")
                     _cached = Settings()
@@ -88,14 +100,74 @@ def get_settings() -> Settings:
 def save_settings(new: Settings) -> Settings:
     global _cached
     with _lock:
+        existing = dict(_cached.api_keys) if _cached is not None else {}
+        new = new.model_copy(
+            update={"api_keys": _secure_api_keys(dict(new.api_keys), existing)}
+        )
         path = _path()
         path.write_text(new.model_dump_json(indent=2))
-        path.chmod(0o600)  # may hold API keys — owner-only
+        path.chmod(0o600)  # fallback entries may hold raw keys — owner-only
         _cached = new
     redacted = new.model_dump()
     redacted["api_keys"] = {k: "•••" for k in redacted.get("api_keys", {})}
     logger.info("Settings saved: %s", redacted)
     return _cached
+
+
+def _secure_api_keys(
+    incoming: dict[str, str], existing: dict[str, str]
+) -> dict[str, str]:
+    """What actually gets persisted for ``api_keys`` on save.
+
+    A raw value is pushed into the Keychain and replaced by the sentinel (kept
+    raw only if the Keychain refuses — the graceful fallback). The sentinel or
+    a blank field means "unchanged": the stored value is preserved, so the
+    UI's GET→edit→PUT round-trip (which only ever sees sentinels) can never
+    clobber a key. ``_google_*`` entries are google_service's own
+    keychain-failure fallback and pass through untouched.
+    """
+    out: dict[str, str] = {}
+    for provider, value in incoming.items():
+        if value in (KEY_SENTINEL, ""):
+            out[provider] = existing.get(provider, value)
+        elif provider.startswith("_google_"):
+            out[provider] = value
+        else:
+            stored = keychain.set_secret(LLM_KEYCHAIN_SERVICE, provider, value)
+            out[provider] = KEY_SENTINEL if stored else value
+    return out
+
+
+def _migrate_plaintext_keys(s: Settings, path: Path) -> Settings:
+    """Move raw LLM keys out of settings.json into the Keychain (first load)."""
+    keys = dict(s.api_keys)
+    moved = 0
+    for provider, value in keys.items():
+        if provider.startswith("_google_") or not value or value == KEY_SENTINEL:
+            continue
+        if keychain.set_secret(LLM_KEYCHAIN_SERVICE, provider, value):
+            keys[provider] = KEY_SENTINEL
+            moved += 1
+    if not moved:
+        return s
+    s = s.model_copy(update={"api_keys": keys})
+    path.write_text(s.model_dump_json(indent=2))
+    path.chmod(0o600)
+    logger.info("Moved %d API key(s) from settings.json into the Keychain.", moved)
+    return s
+
+
+def resolve_api_key(settings: Settings, provider: str) -> str:
+    """The real API key for a provider.
+
+    Sentinel → read the Keychain. Anything else is used as-is: a raw
+    legacy/fallback value from settings.json, or a just-typed key passing
+    through ``/llm/test`` before it's ever saved.
+    """
+    value = settings.api_keys.get(provider, "")
+    if value == KEY_SENTINEL:
+        return keychain.get_secret(LLM_KEYCHAIN_SERVICE, provider) or ""
+    return value
 
 
 def reset_cache() -> None:
