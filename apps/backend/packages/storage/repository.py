@@ -16,17 +16,22 @@ from datetime import datetime
 __all__ = [
     "ActionItem",
     "Meeting",
+    "Person",
     "Proposal",
     "Segment",
     "Speaker",
     "StoredSummary",
+    "add_meeting_attendee",
     "create_meeting",
     "create_speakers",
     "delete_meeting",
     "end_meeting",
     "get_action_items",
     "get_meeting",
+    "get_meeting_ids_for_person",
     "get_meetings",
+    "get_people",
+    "get_person",
     "get_proposal",
     "get_proposals",
     "get_segments",
@@ -35,18 +40,23 @@ __all__ = [
     "get_summary",
     "insert_proposals",
     "insert_segment",
+    "link_speaker_to_person",
     "mark_proposals_stale",
+    "merge_people",
     "rename_speaker",
     "replace_action_items",
+    "replace_segments",
     "save_summary",
     "set_action_item_done",
     "set_meeting_status",
     "set_meeting_title",
+    "set_person_notes",
     "set_proposal_result",
     "set_proposal_status",
     "set_segment_speaker",
     "update_proposal",
     "update_segment_text",
+    "upsert_person_by_email",
 ]
 
 #: Deterministic per-speaker colours (Apple system palette), assigned by order.
@@ -93,6 +103,20 @@ class Speaker:
     label: str  # "Speaker 1" (auto) — overridden by name
     name: str | None  # user-assigned
     color: str
+    person_id: int | None = None  # cross-meeting identity bridge
+
+
+@dataclass
+class Person:
+    """A cross-meeting identity, anchored on email (calendar attendees)."""
+
+    id: int
+    display_name: str | None
+    primary_email: str | None
+    notes: str
+    meeting_count: int
+    last_met: str | None  # started_at of the most recent linked meeting
+    created_at: str
 
 
 @dataclass
@@ -345,6 +369,7 @@ def get_speakers(conn: sqlite3.Connection, meeting_id: int) -> list[Speaker]:
             label=row["label"],
             name=row["name"],
             color=row["color"],
+            person_id=row["person_id"],
         )
         for row in rows
     ]
@@ -560,6 +585,189 @@ def rename_speaker(conn: sqlite3.Connection, speaker_id: int, name: str) -> bool
     )
     conn.commit()
     return cursor.rowcount > 0
+
+
+# ---- People (cross-meeting identity, anchored on email) ----------------------
+
+#: Fields + joins shared by get_people / get_person. meeting_count and last_met
+#: come from the attendee links; primary_email prefers the is_primary flag.
+_PERSON_SELECT = (
+    "SELECT p.id, p.display_name, p.notes, p.created_at, "
+    "  (SELECT email FROM person_emails "
+    "   WHERE person_id = p.id ORDER BY is_primary DESC, email LIMIT 1"
+    "  ) AS primary_email, "
+    "  COUNT(ma.meeting_id) AS meeting_count, "
+    "  MAX(m.started_at) AS last_met "
+    "FROM people p "
+    "LEFT JOIN meeting_attendees ma ON ma.person_id = p.id "
+    "LEFT JOIN meetings m ON m.id = ma.meeting_id "
+)
+
+
+def _person(row: sqlite3.Row) -> Person:
+    return Person(
+        id=row["id"],
+        display_name=row["display_name"],
+        primary_email=row["primary_email"],
+        notes=row["notes"],
+        meeting_count=row["meeting_count"],
+        last_met=row["last_met"],
+        created_at=row["created_at"],
+    )
+
+
+def upsert_person_by_email(
+    conn: sqlite3.Connection, email: str, display_name: str | None = None
+) -> int:
+    """Resolve an email to its person, creating one if unseen; return the id.
+
+    Emails are the cross-meeting anchor: stored lowercased, one email belongs
+    to exactly one person. A later sighting with a display name fills in a
+    person created without one, but never overwrites a name already set.
+    """
+    email = email.strip().lower()
+    if not email:
+        raise ValueError("Email must be non-empty.")
+    row = conn.execute(
+        "SELECT person_id FROM person_emails WHERE email = ?", (email,)
+    ).fetchone()
+    if row is not None:
+        person_id = int(row["person_id"])
+        if display_name:
+            conn.execute(
+                "UPDATE people SET display_name = ? "
+                "WHERE id = ? AND display_name IS NULL",
+                (display_name, person_id),
+            )
+            conn.commit()
+        return person_id
+    cursor = conn.execute(
+        "INSERT INTO people (display_name) VALUES (?)", (display_name,)
+    )
+    person_id = int(cursor.lastrowid)
+    conn.execute(
+        "INSERT INTO person_emails (email, person_id, is_primary) VALUES (?, ?, 1)",
+        (email, person_id),
+    )
+    conn.commit()
+    return person_id
+
+
+def get_people(conn: sqlite3.Connection) -> list[Person]:
+    """Everyone, most recently met first (never-met people last)."""
+    rows = conn.execute(
+        _PERSON_SELECT + "GROUP BY p.id ORDER BY (last_met IS NULL), last_met DESC, p.id"
+    ).fetchall()
+    return [_person(row) for row in rows]
+
+
+def get_person(conn: sqlite3.Connection, person_id: int) -> Person | None:
+    """One person by id, or ``None``."""
+    row = conn.execute(
+        _PERSON_SELECT + "WHERE p.id = ? GROUP BY p.id", (person_id,)
+    ).fetchone()
+    return _person(row) if row is not None else None
+
+
+def set_person_notes(conn: sqlite3.Connection, person_id: int, notes: str) -> bool:
+    """Replace a person's notes; return False if the person is unknown."""
+    cursor = conn.execute(
+        "UPDATE people SET notes = ? WHERE id = ?", (notes, person_id)
+    )
+    conn.commit()
+    return cursor.rowcount > 0
+
+
+def add_meeting_attendee(
+    conn: sqlite3.Connection, meeting_id: int, person_id: int, source: str = "calendar"
+) -> None:
+    """Link a person to a meeting they attended (idempotent)."""
+    conn.execute(
+        "INSERT OR IGNORE INTO meeting_attendees (meeting_id, person_id, source) "
+        "VALUES (?, ?, ?)",
+        (meeting_id, person_id, source),
+    )
+    conn.commit()
+
+
+def get_meeting_ids_for_person(
+    conn: sqlite3.Connection, person_id: int
+) -> list[int]:
+    """Ids of the meetings a person attended, newest first."""
+    rows = conn.execute(
+        "SELECT ma.meeting_id FROM meeting_attendees ma "
+        "JOIN meetings m ON m.id = ma.meeting_id "
+        "WHERE ma.person_id = ? ORDER BY m.started_at DESC, ma.meeting_id",
+        (person_id,),
+    ).fetchall()
+    return [int(row["meeting_id"]) for row in rows]
+
+
+def link_speaker_to_person(
+    conn: sqlite3.Connection, speaker_id: int, person_id: int | None
+) -> bool:
+    """Bridge a per-meeting speaker to a person (``None`` unlinks); False if
+    the speaker is unknown."""
+    cursor = conn.execute(
+        "UPDATE speakers SET person_id = ? WHERE id = ?", (person_id, speaker_id)
+    )
+    conn.commit()
+    return cursor.rowcount > 0
+
+
+def merge_people(conn: sqlite3.Connection, keep_id: int, drop_id: int) -> None:
+    """Fold ``drop_id`` into ``keep_id``, atomically.
+
+    Repoints emails, attendee links, and speaker bridges; unions notes; keeps
+    ``keep``'s display name (falling back to ``drop``'s); deletes the dropped
+    row. Runs in one transaction — a failure part-way leaves both people
+    untouched. Overlapping attendee rows (both people in the same meeting)
+    collapse into one instead of violating the primary key.
+    """
+    if keep_id == drop_id:
+        raise ValueError("Cannot merge a person into themselves.")
+    with conn:  # BEGIN … COMMIT (or ROLLBACK on error)
+        rows = {
+            row["id"]: (row["display_name"], row["notes"])
+            for row in conn.execute(
+                "SELECT id, display_name, notes FROM people WHERE id IN (?, ?)",
+                (keep_id, drop_id),
+            )
+        }
+        if keep_id not in rows or drop_id not in rows:
+            raise ValueError("Both people must exist to merge.")
+        # Moved emails lose their primary flag — keep's primary stays primary.
+        conn.execute(
+            "UPDATE person_emails SET person_id = ?, is_primary = 0 "
+            "WHERE person_id = ?",
+            (keep_id, drop_id),
+        )
+        # Collapse meetings both attended, then repoint the rest.
+        conn.execute(
+            "DELETE FROM meeting_attendees WHERE person_id = ? AND meeting_id IN "
+            "(SELECT meeting_id FROM meeting_attendees WHERE person_id = ?)",
+            (drop_id, keep_id),
+        )
+        conn.execute(
+            "UPDATE meeting_attendees SET person_id = ? WHERE person_id = ?",
+            (keep_id, drop_id),
+        )
+        conn.execute(
+            "UPDATE speakers SET person_id = ? WHERE person_id = ?",
+            (keep_id, drop_id),
+        )
+        keep_name, keep_notes = rows[keep_id]
+        drop_name, drop_notes = rows[drop_id]
+        notes = (
+            f"{keep_notes}\n\n{drop_notes}"
+            if keep_notes and drop_notes
+            else keep_notes or drop_notes
+        )
+        conn.execute(
+            "UPDATE people SET display_name = ?, notes = ? WHERE id = ?",
+            (keep_name or drop_name, notes, keep_id),
+        )
+        conn.execute("DELETE FROM people WHERE id = ?", (drop_id,))
 
 
 def set_meeting_title(conn: sqlite3.Connection, meeting_id: int, title: str) -> None:
