@@ -96,3 +96,27 @@ def test_reset_allows_reuse():
         seg.process(np.zeros((BLOCK, 1), np.float32))
     seg.reset()
     assert seg.is_speech_active is False
+
+
+def test_continuous_speech_is_force_split_at_max_segment():
+    # ~6.4 s of unbroken speech, then silence. With a 2 s cap the segmenter
+    # must emit ~2 s pieces that tile the speech with no gaps — never one
+    # giant segment (a long clip explodes the ASR encoder's memory).
+    schedule = [0.9] * 100 + [0.0] * 15
+    segments = run(schedule, min_speech_ms=250, min_silence_ms=700,
+                   padding_ms=200, max_segment_ms=2000)
+
+    assert len(segments) >= 4  # three forced splits + the natural tail
+    for seg in segments:
+        assert seg.end_ms - seg.start_ms <= 2000 + 64  # cap, +1 block of slack
+        assert seg.audio.size == int((seg.end_ms - seg.start_ms) * SAMPLE_RATE / 1000)
+    # Forced splits hand off exactly where they cut: no dropped or repeated audio.
+    for earlier, later in zip(segments, segments[1:-1]):
+        assert earlier.end_ms == later.start_ms
+
+
+def test_normal_utterance_is_not_split_by_the_default_cap():
+    # ~10 s of speech is well under the 30 s default — exactly one segment.
+    schedule = [0.9] * 156 + [0.0] * 15
+    segments = run(schedule, min_speech_ms=250, min_silence_ms=700, padding_ms=200)
+    assert len(segments) == 1

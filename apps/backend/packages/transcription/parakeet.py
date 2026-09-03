@@ -38,6 +38,9 @@ class ParakeetTranscriber:
     """
 
     SAMPLE_RATE = 16_000
+    #: Encoder memory grows super-linearly with clip length (measured: a
+    #: 3-minute clip exceeds 7 GB). Anything longer is windowed.
+    MAX_CLIP_SECONDS = 30
 
     def __init__(self, variant: str = "parakeet-v3", quantization: str = "int8") -> None:
         import onnx_asr
@@ -46,7 +49,16 @@ class ParakeetTranscriber:
         self.variant = variant
         # v3 is multilingual; we don't run language ID, so report "multi".
         self.language = "en" if variant == "parakeet-v2" else "multi"
-        self.model = onnx_asr.load_model(model_id, quantization=quantization)
+        # CPU provider, explicitly. onnx_asr defaults to every available
+        # provider, which on macOS puts CoreML first — and ORT's CoreML EP
+        # re-compiles per input shape and never releases: measured on an M-series
+        # Mac, memory ratcheted 1.4 → 7+ GB across a dozen segment lengths (even
+        # identical 30 s inputs grew 3.6 → 6.5 GB), which is what OOM-crashed
+        # long meetings. On CPU the same sequence stays flat at ~1.8 GB and each
+        # call is 5–20× faster (0.1–0.7 s vs 2.2–3.4 s).
+        self.model = onnx_asr.load_model(
+            model_id, quantization=quantization, providers=["CPUExecutionProvider"]
+        )
         logger.info("ParakeetTranscriber loaded (%s, %s).", model_id, quantization)
 
     def transcribe(
@@ -64,7 +76,16 @@ class ParakeetTranscriber:
         samples = np.ascontiguousarray(np.asarray(audio, dtype=np.float32).reshape(-1))
         if samples.size == 0:
             return None
-        text = (self.model.recognize(samples, sample_rate=self.SAMPLE_RATE) or "").strip()
+        # Window long clips and join the text — never hand the encoder more
+        # than MAX_CLIP_SECONDS at once (defense in depth behind the VAD cap).
+        max_samples = self.MAX_CLIP_SECONDS * self.SAMPLE_RATE
+        pieces = []
+        for start in range(0, samples.size, max_samples):
+            chunk = samples[start : start + max_samples]
+            piece = (self.model.recognize(chunk, sample_rate=self.SAMPLE_RATE) or "").strip()
+            if piece:
+                pieces.append(piece)
+        text = " ".join(pieces)
         if not text:
             return None
         duration_ms = int(samples.size / self.SAMPLE_RATE * 1000)

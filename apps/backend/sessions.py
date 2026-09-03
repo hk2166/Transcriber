@@ -45,6 +45,11 @@ AudioSource = Literal["mic", "system", "both"]
 #: Stream buffer: 256 blocks ≈ 16 s of audio. Overflow drops WebSocket
 #: audio only — the recorder tee always receives every block.
 STREAM_QUEUE_MAXSIZE = 256
+#: Speech-segment backlog for the live transcriber. Each item carries its
+#: audio, so this must be bounded: if the engine falls behind, we drop live
+#: speech (and say so once) rather than let audio pile up in memory — the WAV
+#: on disk is lossless and the post-meeting refine recovers the text.
+SEG_QUEUE_MAXSIZE = 64
 
 _transcriber = None
 _transcriber_lock = threading.Lock()
@@ -135,8 +140,9 @@ class AudioSession:
         # worker via _seg_queue; finished transcripts fan out to the
         # transcription WebSocket via transcript_queue.
         self._seg_queue: asyncio.Queue[tuple[SpeechSegment, float] | None] = (
-            asyncio.Queue()
+            asyncio.Queue(maxsize=SEG_QUEUE_MAXSIZE)
         )
+        self._seg_drops = 0
         self.transcript_queue: asyncio.Queue[TranscriptSegment | None] = asyncio.Queue()
         self._worker_task: asyncio.Task | None = None
 
@@ -172,7 +178,7 @@ class AudioSession:
         if self._segmenter is not None:
             for segment in self._segmenter.process(block):
                 self._loop.call_soon_threadsafe(
-                    self._seg_queue.put_nowait, (segment, time.monotonic())
+                    self._enqueue_segment, (segment, time.monotonic())
                 )
             self._speech_active = self._segmenter.is_speech_active
         self._loop.call_soon_threadsafe(self._enqueue_for_stream, block)
@@ -188,6 +194,25 @@ class AudioSession:
                     "Stream queue full — dropping WebSocket audio "
                     "(recording on disk is unaffected)."
                 )
+
+    def _enqueue_segment(self, item: tuple[SpeechSegment, float]) -> None:
+        """Runs on the event loop; drops speech if the transcriber is far
+        behind rather than growing the queue without bound."""
+        try:
+            self._seg_queue.put_nowait(item)
+        except asyncio.QueueFull:
+            self._seg_drops += 1
+            if self._seg_drops == 1:
+                logger.warning(
+                    "Transcriber can't keep up — dropping live speech segments "
+                    "(the recording on disk is unaffected; refine recovers it)."
+                )
+
+    def _end_segments(self) -> None:
+        """Deliver the worker's end sentinel, evicting a segment if full."""
+        if self._seg_queue.full():
+            self._seg_queue.get_nowait()
+        self._seg_queue.put_nowait(None)
 
     def _end_stream(self) -> None:
         """Deliver the end-of-stream sentinel, evicting a block if full."""
@@ -304,9 +329,9 @@ class AudioSession:
             tail = self._segmenter.flush()
             if tail is not None:
                 self._loop.call_soon_threadsafe(
-                    self._seg_queue.put_nowait, (tail, time.monotonic())
+                    self._enqueue_segment, (tail, time.monotonic())
                 )
-            self._loop.call_soon_threadsafe(self._seg_queue.put_nowait, None)
+            self._loop.call_soon_threadsafe(self._end_segments)
         self._loop.call_soon_threadsafe(self._end_stream)
         logger.info(
             "Session %s stopped (%.1f s recorded).",

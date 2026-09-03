@@ -66,6 +66,7 @@ class SpeechSegmenter:
         min_silence_ms: int = 700,
         padding_ms: int = 200,
         sample_rate: int = 16_000,
+        max_segment_ms: int = 30_000,
     ) -> None:
         """Configure the segmenter.
 
@@ -79,6 +80,9 @@ class SpeechSegmenter:
             min_silence_ms: Silence this long ends a segment.
             padding_ms: Audio kept on each side of the speech core.
             sample_rate: Audio sample rate (Hz).
+            max_segment_ms: Hard cap on one segment. Continuous speech is
+                force-split here so a single clip can never grow without
+                bound (long clips explode the ASR encoder's memory).
         """
         self.vad = vad
         self.threshold = threshold
@@ -89,6 +93,7 @@ class SpeechSegmenter:
         self.min_speech_samples = int(min_speech_ms * sample_rate / 1000)
         self.min_silence_samples = int(min_silence_ms * sample_rate / 1000)
         self.padding_samples = int(padding_ms * sample_rate / 1000)
+        self.max_segment_samples = int(max_segment_ms * sample_rate / 1000)
         self.reset()
 
     def reset(self) -> None:
@@ -153,8 +158,26 @@ class SpeechSegmenter:
             else:
                 self._silence_samples = 0
 
+            # Continuous speech with no pause: never let one segment grow
+            # without bound (a long clip explodes the ASR encoder's memory).
+            # Close it here and keep listening — the next block continues
+            # seamlessly as a new segment.
+            if self._triggered and end_pos - self._seg_start >= self.max_segment_samples:
+                out.append(self._split(end_pos))
+
         self._pos = end_pos
         return out
+
+    def _split(self, end_pos: int) -> SpeechSegment:
+        """Force-close the active segment at ``end_pos`` and start a fresh one
+        from the same point, so speech continues uninterrupted."""
+        audio = np.concatenate(self._speech_buf)
+        seg = SpeechSegment(audio, self._ms(self._seg_start), self._ms(end_pos))
+        self._speech_buf = []
+        self._seg_start = end_pos
+        self._trigger_pos = end_pos
+        self._silence_samples = 0
+        return seg
 
     def _finish(self, end_pos: int) -> SpeechSegment | None:
         """Close the active segment, trimming trailing silence to padding."""
