@@ -62,22 +62,25 @@ export class ApiError extends Error {
   }
 }
 
+/** The error for a failed response, carrying FastAPI's `detail` when present. */
+async function readError(res: Response): Promise<ApiError> {
+  let detail = res.statusText;
+  try {
+    const data = await res.json();
+    if (typeof data?.detail === "string") detail = data.detail;
+  } catch {
+    // Non-JSON error body — fall back to the status text.
+  }
+  return new ApiError(res.status, detail);
+}
+
 async function postJson<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body ?? {}),
   });
-  if (!res.ok) {
-    let detail = res.statusText;
-    try {
-      const data = await res.json();
-      if (typeof data?.detail === "string") detail = data.detail;
-    } catch {
-      // Non-JSON error body — fall back to the status text.
-    }
-    throw new ApiError(res.status, detail);
-  }
+  if (!res.ok) throw await readError(res);
   return (await res.json()) as T;
 }
 
@@ -339,28 +342,12 @@ export async function downloadExport(
   URL.revokeObjectURL(url);
 }
 
-interface ChatHandlers {
-  onSources?: (sources: ChatSource[]) => void;
-  onToken?: (token: string) => void;
-  onError?: (message: string) => void;
-}
-
-/** POST a question and consume the SSE stream (sources → tokens → done). */
-export async function streamChat(
-  meetingId: number,
-  question: string,
-  handlers: ChatHandlers,
+/** Consume a text/event-stream body, calling `onEvent` per event/data pair. */
+async function readSse(
+  body: ReadableStream<Uint8Array>,
+  onEvent: (event: string, data: any) => void,
 ): Promise<void> {
-  const res = await fetch(`${API_BASE}/meetings/${meetingId}/chat`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question }),
-  });
-  if (!res.ok || !res.body) {
-    throw new ApiError(res.status, res.statusText);
-  }
-
-  const reader = res.body.getReader();
+  const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
 
@@ -378,13 +365,108 @@ export async function streamChat(
       const event = lines.find((l) => l.startsWith("event:"))?.slice(6).trim();
       const dataLine = lines.find((l) => l.startsWith("data:"))?.slice(5).trim();
       if (!event || !dataLine) continue;
-      const data = JSON.parse(dataLine);
-
-      if (event === "sources") handlers.onSources?.(data.sources);
-      else if (event === "token") handlers.onToken?.(data.text);
-      else if (event === "error") handlers.onError?.(data.message);
+      onEvent(event, JSON.parse(dataLine));
     }
   }
+}
+
+interface ChatHandlers {
+  onSources?: (sources: ChatSource[]) => void;
+  onToken?: (token: string) => void;
+  onError?: (message: string) => void;
+}
+
+/** POST a question and consume the SSE stream (sources → tokens → done). */
+export async function streamChat(
+  meetingId: number,
+  question: string,
+  handlers: ChatHandlers,
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/meetings/${meetingId}/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ question }),
+  });
+  if (!res.ok || !res.body) throw await readError(res);
+  await readSse(res.body, (event, data) => {
+    if (event === "sources") handlers.onSources?.(data.sources);
+    else if (event === "token") handlers.onToken?.(data.text);
+    else if (event === "error") handlers.onError?.(data.message);
+  });
+}
+
+/** A cross-meeting identity, anchored on a calendar-attendee email. */
+export interface Person {
+  id: number;
+  display_name: string | null;
+  primary_email: string | null;
+  notes: string;
+  meeting_count: number;
+  last_met: string | null; // started_at of the most recent linked meeting
+  created_at: string;
+}
+
+export interface PersonMeeting {
+  id: number;
+  title: string;
+  started_at: string;
+}
+
+export interface PersonDetail {
+  person: Person;
+  meetings: PersonMeeting[];
+}
+
+export function getPeople(): Promise<Person[]> {
+  return getJson<Person[]>("/people");
+}
+
+export function getPerson(id: number): Promise<PersonDetail> {
+  return getJson<PersonDetail>(`/people/${id}`);
+}
+
+export function patchPerson(
+  id: number,
+  patch: { display_name?: string; notes?: string },
+): Promise<Person> {
+  return patchJson<Person>(`/people/${id}`, patch);
+}
+
+export interface PrepSource {
+  segment_id: number;
+  meeting_id: number;
+  meeting_title: string;
+  date: string; // "Aug 12" — formatted by the backend
+  text: string;
+  score: number;
+}
+
+interface PrepHandlers {
+  onLens?: (key: string, title: string) => void;
+  onSources?: (key: string, sources: PrepSource[]) => void;
+  onToken?: (key: string, text: string) => void;
+  onLensEmpty?: (key: string) => void;
+  onLensDone?: (key: string) => void;
+  onError?: (message: string) => void;
+}
+
+/** GET the prep briefing as SSE — per lens: lens → sources → token… →
+ *  lens_done (or lens_empty when nothing matched), then done. */
+export async function streamPrep(
+  personId: number,
+  handlers: PrepHandlers,
+  signal?: AbortSignal,
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/people/${personId}/prep`, { signal });
+  if (!res.ok || !res.body) throw await readError(res);
+  await readSse(res.body, (event, data) => {
+    if (event === "lens") handlers.onLens?.(data.key, data.title);
+    else if (event === "sources") handlers.onSources?.(data.key, data.sources);
+    else if (event === "token") handlers.onToken?.(data.key, data.text);
+    else if (event === "lens_empty") handlers.onLensEmpty?.(data.key);
+    else if (event === "lens_done") handlers.onLensDone?.(data.key);
+    else if (event === "error") handlers.onError?.(data.message);
+  });
 }
 
 export function getMeetingSegments(id: number): Promise<TranscriptSegment[]> {
@@ -423,16 +505,7 @@ async function patchJson<T>(path: string, body: unknown): Promise<T> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (!res.ok) {
-    let detail = res.statusText;
-    try {
-      const data = await res.json();
-      if (typeof data?.detail === "string") detail = data.detail;
-    } catch {
-      // Non-JSON error body — fall back to the status text.
-    }
-    throw new ApiError(res.status, detail);
-  }
+  if (!res.ok) throw await readError(res);
   return (await res.json()) as T;
 }
 

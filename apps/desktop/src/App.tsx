@@ -31,6 +31,7 @@ import { APP_NAME } from "./config";
 import { confirmDialog } from "./confirm";
 import { DetectBanner } from "./DetectBanner";
 import {
+  IconPeople,
   IconPlus,
   IconSearch,
   IconSettings,
@@ -42,6 +43,7 @@ import { ExportMenu } from "./ExportMenu";
 import { LiveTranscript } from "./LiveTranscript";
 import { MeetingChat } from "./MeetingChat";
 import { ModelBanner } from "./ModelBanner";
+import { PeopleView } from "./PeopleView";
 import { RecordButton } from "./RecordButton";
 import { SettingsPanel } from "./SettingsPanel";
 import { SourceSelector } from "./SourceSelector";
@@ -120,6 +122,7 @@ function App() {
   const [pastProposals, setPastProposals] = useState<SyncProposal[]>([]);
   const [showSettings, setShowSettings] = useState(false);
   const [showActions, setShowActions] = useState(false);
+  const [showPeople, setShowPeople] = useState(false);
 
   // Playback state for the past-meeting view.
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -204,6 +207,7 @@ function App() {
   const selectMeeting = async (id: number) => {
     setSelectedId(id);
     setShowActions(false);
+    setShowPeople(false);
     setMeetingTab("transcript");
     setPlaybackMs(null);
     setPlaybackOk(true);
@@ -299,6 +303,7 @@ function App() {
   const newRecording = () => {
     setSelectedId(null);
     setShowActions(false);
+    setShowPeople(false);
     setPastSegments([]);
     setPastSpeakers([]);
     setPastSummary(null);
@@ -463,9 +468,11 @@ function App() {
     ? "search"
     : showActions
       ? "actions"
-      : viewingPast
-        ? `past-${selectedId}`
-        : "live";
+      : showPeople
+        ? "people"
+        : viewingPast
+          ? `past-${selectedId}`
+          : "live";
 
   return (
     <MotionConfig reducedMotion="user">
@@ -482,16 +489,30 @@ function App() {
           <IconPlus size={15} /> New meeting
         </button>
 
-        <button
-          className={"nav-actions" + (showActions ? " nav-actions--active" : "")}
-          onClick={() => {
-            setSelectedId(null);
-            setShowActions(true);
-          }}
-          disabled={!idle}
-        >
-          <IconTasks size={15} /> Action items
-        </button>
+        <div className="nav-row">
+          <button
+            className={"nav-actions" + (showActions ? " nav-actions--active" : "")}
+            onClick={() => {
+              setSelectedId(null);
+              setShowPeople(false);
+              setShowActions(true);
+            }}
+            disabled={!idle}
+          >
+            <IconTasks size={15} /> Action items
+          </button>
+          <button
+            className={"nav-actions" + (showPeople ? " nav-actions--active" : "")}
+            onClick={() => {
+              setSelectedId(null);
+              setShowActions(false);
+              setShowPeople(true);
+            }}
+            disabled={!idle}
+          >
+            <IconPeople size={15} /> People
+          </button>
+        </div>
 
         <div className="search-field">
           <IconSearch size={15} className="search-field__icon" />
@@ -644,6 +665,8 @@ function App() {
             </header>
             <ActionItems onOpenMeeting={selectMeeting} />
           </>
+        ) : showPeople ? (
+          <PeopleView onOpenMeeting={selectMeeting} />
         ) : viewingPast ? (
           <>
             <header className="topbar">
