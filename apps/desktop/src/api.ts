@@ -564,16 +564,37 @@ export function startModelDownload(engine?: string): Promise<ModelStatus> {
   return postJson<ModelStatus>(`/system/model-download${q}`);
 }
 
+export interface UpcomingPerson {
+  id: number;
+  display_name: string;
+}
+
+/** A calendar event about to start (or underway) and its known attendees. */
+export interface UpcomingMeeting {
+  event_id: string;
+  event_title: string;
+  start_iso: string;
+  people: UpcomingPerson[]; // most-met first — [0] is the one to prep for
+  unknown_count: number; // human attendees with no Person record yet
+}
+
 export interface MeetingApp {
   app: string | null;
   since: number | null;
   source: "app" | "microphone" | null;
   recording: boolean;
   mode: "off" | "prompt" | "auto";
+  upcoming?: UpcomingMeeting | null; // absent from a backend that predates it
 }
 
 export function getMeetingApp(): Promise<MeetingApp> {
   return getJson<MeetingApp>("/system/meeting-app");
+}
+
+export function dismissUpcoming(eventId: string): Promise<{ dismissed: string }> {
+  return postJson<{ dismissed: string }>("/system/meeting-app/dismiss", {
+    event_id: eventId,
+  });
 }
 
 export interface SpeakerPackStatus {

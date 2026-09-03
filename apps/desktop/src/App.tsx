@@ -3,6 +3,7 @@ import { AnimatePresence, motion, MotionConfig } from "framer-motion";
 
 import {
   deleteMeeting,
+  dismissUpcoming,
   enableAudioRouting,
   getAudioRouting,
   getMeetingApp,
@@ -51,6 +52,7 @@ import { SummaryPanel } from "./SummaryPanel";
 import { SyncPanel } from "./SyncPanel";
 import { toast } from "./toast";
 import { Toasts } from "./Toasts";
+import { UpcomingCard } from "./UpcomingCard";
 import { viewSwap } from "./motion";
 import { useRecorder, type RecorderStatus } from "./useRecorder";
 import { VolumeMeter } from "./VolumeMeter";
@@ -123,6 +125,11 @@ function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showActions, setShowActions] = useState(false);
   const [showPeople, setShowPeople] = useState(false);
+  // Pre-call card: the person to open (Prep) and the event hidden this session.
+  const [openPerson, setOpenPerson] = useState<{ id: number; prep: boolean } | null>(
+    null,
+  );
+  const [dismissedEventId, setDismissedEventId] = useState<string | null>(null);
 
   // Playback state for the past-meeting view.
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -409,6 +416,24 @@ function App() {
     meetingApp.since != null &&
     dismissedSince !== meetingApp.since;
 
+  const upcoming = meetingApp?.upcoming ?? null;
+  const showUpcoming =
+    idle && upcoming !== null && upcoming.event_id !== dismissedEventId;
+
+  // Prep is the one explicit request that starts a briefing — nothing streams
+  // until this click.
+  const prepFor = (personId: number) => {
+    setSelectedId(null);
+    setShowActions(false);
+    setOpenPerson({ id: personId, prep: true });
+    setShowPeople(true);
+  };
+
+  const dismissUpcomingEvent = (eventId: string) => {
+    setDismissedEventId(eventId); // hide now; the backend remembers for the session
+    dismissUpcoming(eventId).catch(() => {});
+  };
+
   // --- Tauri shell glue (tray + global hotkey) — no-ops in the dev browser.
   const toggleRef = useRef(handleToggle);
   useEffect(() => {
@@ -506,6 +531,7 @@ function App() {
             onClick={() => {
               setSelectedId(null);
               setShowActions(false);
+              setOpenPerson(null);
               setShowPeople(true);
             }}
             disabled={!idle}
@@ -607,6 +633,13 @@ function App() {
       <Toasts />
 
       <main className="main">
+        {showUpcoming && upcoming && (
+          <UpcomingCard
+            upcoming={upcoming}
+            onPrep={prepFor}
+            onDismiss={() => dismissUpcomingEvent(upcoming.event_id)}
+          />
+        )}
         {showDetectBanner && meetingApp && (
           <DetectBanner
             info={meetingApp}
@@ -666,7 +699,7 @@ function App() {
             <ActionItems onOpenMeeting={selectMeeting} />
           </>
         ) : showPeople ? (
-          <PeopleView onOpenMeeting={selectMeeting} />
+          <PeopleView onOpenMeeting={selectMeeting} initialPerson={openPerson} />
         ) : viewingPast ? (
           <>
             <header className="topbar">

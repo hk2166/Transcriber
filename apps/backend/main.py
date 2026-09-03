@@ -12,6 +12,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+import calendar_lookahead
 import meeting_detect
 from database import close_db, get_db
 from routers.action_items import router as action_items_router
@@ -62,10 +63,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Recover any meeting a previous crash / force-quit left stuck before serving.
     postprocess_job.reconcile_interrupted_meetings()
     detect_task = asyncio.create_task(meeting_detect.poller())
+    lookahead_task = asyncio.create_task(calendar_lookahead.refresher())
     yield
-    detect_task.cancel()
-    with suppress(asyncio.CancelledError):
-        await detect_task
+    for task in (lookahead_task, detect_task):
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
     # Quitting mid-recording (Cmd-Q) lands here: flush the WAV and mark the
     # meeting so the next launch's reconciliation finishes it — never lose it.
     try:

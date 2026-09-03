@@ -9,6 +9,7 @@ import ollama
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+import calendar_lookahead
 import llm
 import meeting_detect
 import model_download
@@ -163,11 +164,24 @@ def model_download_start(engine: str | None = None) -> dict[str, Any]:
 
 @router.get("/system/meeting-app")
 def meeting_app() -> dict[str, Any]:
-    """Currently detected meeting app (Zoom/Webex), if any."""
+    """Currently detected meeting app (Zoom/Webex), if any, plus the calendar
+    event about to start (``upcoming``), if any."""
     detected = meeting_detect.current()
     detected["recording"] = manager.active is not None
     detected["mode"] = get_settings().auto_record
+    detected["upcoming"] = calendar_lookahead.current()
     return detected
+
+
+class DismissUpcoming(BaseModel):
+    event_id: str
+
+
+@router.post("/system/meeting-app/dismiss")
+def dismiss_upcoming(body: DismissUpcoming) -> dict[str, str]:
+    """Hide the pre-call card for this event until the app restarts."""
+    calendar_lookahead.dismiss(body.event_id)
+    return {"dismissed": body.event_id}
 
 
 @router.get("/system/speaker-pack")

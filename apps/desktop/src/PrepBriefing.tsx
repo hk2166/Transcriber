@@ -99,11 +99,14 @@ export function PrepBriefing({
   personId,
   personName,
   meetingCount,
+  autoStart = false,
   onOpenMeeting,
 }: {
   personId: number;
   personName: string;
   meetingCount: number;
+  /** Start on arrival — the pre-call card's Prep click is the explicit request. */
+  autoStart?: boolean;
   onOpenMeeting: (meetingId: number) => void;
 }) {
   const [lenses, setLenses] = useState<Lens[] | null>(
@@ -172,6 +175,12 @@ export function PrepBriefing({
       if (!controller.signal.aborted) setBusy(false);
     }
   };
+
+  // A briefing already prepared this session is shown as-is, never re-run.
+  useEffect(() => {
+    if (autoStart && !briefings.has(personId)) run();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoStart, personId]);
 
   const started = lenses !== null && (lenses.length > 0 || busy);
 

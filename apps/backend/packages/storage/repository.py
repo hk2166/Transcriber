@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -712,6 +712,30 @@ def get_person(conn: sqlite3.Connection, person_id: int) -> Person | None:
         _PERSON_SELECT + "WHERE p.id = ? GROUP BY p.id", (person_id,)
     ).fetchone()
     return _person(row) if row is not None else None
+
+
+def get_people_by_emails(
+    conn: sqlite3.Connection, emails: Iterable[str]
+) -> dict[str, Person]:
+    """Known people keyed by (normalised) email; unknown emails are absent.
+
+    The read-only counterpart of ``upsert_person_by_email`` for callers that
+    must never create a person as a side effect (the calendar lookahead).
+    """
+    wanted = sorted({e.strip().lower() for e in emails if e and e.strip()})
+    if not wanted:
+        return {}
+    marks = ",".join("?" * len(wanted))
+    rows = conn.execute(
+        f"SELECT email, person_id FROM person_emails WHERE email IN ({marks})",
+        wanted,
+    ).fetchall()
+    found: dict[str, Person] = {}
+    for row in rows:
+        person = get_person(conn, int(row["person_id"]))
+        if person is not None:
+            found[str(row["email"])] = person
+    return found
 
 
 def set_person_notes(conn: sqlite3.Connection, person_id: int, notes: str) -> bool:

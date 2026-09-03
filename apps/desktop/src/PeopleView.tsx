@@ -53,11 +53,15 @@ function meetingDate(iso: string): string {
 
 export function PeopleView({
   onOpenMeeting,
+  initialPerson = null,
 }: {
   onOpenMeeting: (meetingId: number) => void;
+  /** Open straight to a person (the pre-call card's Prep); `prep` starts the briefing. */
+  initialPerson?: { id: number; prep: boolean } | null;
 }) {
   const [people, setPeople] = useState<Person[] | null>(null);
   const [selected, setSelected] = useState<Person | null>(null);
+  const [autoPrep, setAutoPrep] = useState(false);
 
   useEffect(() => {
     getPeople()
@@ -68,7 +72,31 @@ export function PeopleView({
       });
   }, []);
 
-  const back = useCallback(() => setSelected(null), []);
+  useEffect(() => {
+    if (!initialPerson) return;
+    let cancelled = false;
+    getPerson(initialPerson.id)
+      .then((loaded) => {
+        if (cancelled) return;
+        setAutoPrep(initialPerson.prep);
+        setSelected(loaded.person);
+      })
+      .catch(() => {
+        if (!cancelled) toast("Couldn't open that person.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [initialPerson]);
+
+  const back = useCallback(() => {
+    setSelected(null);
+    setAutoPrep(false);
+  }, []);
+  const open = useCallback((person: Person) => {
+    setAutoPrep(false);
+    setSelected(person);
+  }, []);
 
   // Keyed remount runs the enter animation on roster ↔ person, like App's views.
   return (
@@ -80,10 +108,11 @@ export function PeopleView({
       animate="animate"
     >
       {selected === null ? (
-        <Roster people={people} onOpen={setSelected} />
+        <Roster people={people} onOpen={open} />
       ) : (
         <PersonPage
           person={selected}
+          autoPrep={autoPrep}
           onBack={back}
           onOpenMeeting={onOpenMeeting}
         />
@@ -159,10 +188,12 @@ function Roster({
 
 function PersonPage({
   person,
+  autoPrep,
   onBack,
   onOpenMeeting,
 }: {
   person: Person;
+  autoPrep: boolean;
   onBack: () => void;
   onOpenMeeting: (meetingId: number) => void;
 }) {
@@ -264,6 +295,7 @@ function PersonPage({
             personId={person.id}
             personName={personName(person)}
             meetingCount={meetingCount}
+            autoStart={autoPrep}
             onOpenMeeting={onOpenMeeting}
           />
         </div>
