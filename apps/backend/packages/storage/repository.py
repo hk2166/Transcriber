@@ -58,6 +58,7 @@ __all__ = [
     "set_proposal_status",
     "set_segment_speaker",
     "update_proposal",
+    "update_person",
     "update_segment_text",
     "upsert_calendar_event",
     "upsert_person_by_email",
@@ -718,6 +719,30 @@ def set_person_notes(conn: sqlite3.Connection, person_id: int, notes: str) -> bo
     cursor = conn.execute(
         "UPDATE people SET notes = ? WHERE id = ?", (notes, person_id)
     )
+    conn.commit()
+    return cursor.rowcount > 0
+
+
+def update_person(
+    conn: sqlite3.Connection,
+    person_id: int,
+    *,
+    display_name: str | None = None,
+    notes: str | None = None,
+) -> bool:
+    """Update only the provided fields; False if the person is unknown."""
+    sets: list[str] = []
+    params: list = []
+    if display_name is not None:
+        sets.append("display_name = ?")
+        params.append(display_name.strip() or None)
+    if notes is not None:
+        sets.append("notes = ?")
+        params.append(notes)
+    if not sets:
+        return get_person(conn, person_id) is not None
+    params.append(person_id)
+    cursor = conn.execute(f"UPDATE people SET {', '.join(sets)} WHERE id = ?", params)
     conn.commit()
     return cursor.rowcount > 0
 

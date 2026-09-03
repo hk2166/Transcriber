@@ -49,6 +49,7 @@ from packages.storage.repository import (
     set_proposal_result,
     set_proposal_status,
     set_segment_speaker,
+    update_person,
     update_proposal,
     update_segment_text,
     upsert_calendar_event,
@@ -92,6 +93,7 @@ __all__ = [
     "set_proposal_result",
     "set_proposal_status",
     "set_segment_speaker",
+    "update_person",
     "update_proposal",
     "update_segment_text",
 ]
