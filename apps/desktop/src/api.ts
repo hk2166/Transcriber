@@ -128,6 +128,7 @@ export interface Settings {
   refine_model: string;
   auto_record: "off" | "prompt" | "auto";
   integrations_enabled: Record<string, boolean>;
+  notion_parent: string;
   llm_provider: string;
   llm_model: string;
   llm_base_url: string;
@@ -152,6 +153,22 @@ export interface IntegrationInfo {
   label: string;
   available: boolean;
   enabled: boolean;
+  needs_token: boolean;
+  configured: boolean; // token + parent present (Notion); always true for Apple
+  hint: string | null; // shown when an unconfigured target needs setup
+}
+
+export interface NotionTest {
+  ok: boolean;
+  error?: string;
+  bot_name?: string;
+  workspace_name?: string;
+  parent?: { kind: string; title: string };
+}
+
+/** Validate an unsaved Notion token + parent (sends no meeting content). */
+export function testNotion(candidate: Settings): Promise<NotionTest> {
+  return postJson<NotionTest>("/integrations/notion/test", candidate);
 }
 
 // --- Google connect (bring-your-own-credentials) ---

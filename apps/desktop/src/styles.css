@@ -1055,10 +1055,13 @@ summary:focus-visible,
   letter-spacing: 0.05em; color: var(--text-tertiary); margin: 0 0 2px;
 }
 .sync-card {
-  display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  display: flex; flex-direction: column; gap: 10px;
   padding: 12px 14px;
   background: var(--bg-elevated);
   border: 1px solid var(--border); border-radius: var(--radius);
+}
+.sync-card__row {
+  display: flex; align-items: center; justify-content: space-between; gap: 14px;
 }
 .sync-card--skipped { opacity: 0.55; }
 .sync-card__main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
@@ -1095,6 +1098,22 @@ summary:focus-visible,
 .sync-card__apply:hover { filter: brightness(1.1); }
 .sync-card__apply:disabled, .sync-card__skip:disabled { opacity: 0.5; }
 .sync-card__done { font-size: 12.5px; font-weight: 600; color: var(--ok); }
+.sync-card__link {
+  background: none; border: none; padding: 0; font: inherit; font-size: 12.5px;
+  color: var(--accent); text-decoration: underline; cursor: pointer; white-space: nowrap;
+}
+.sync-card__editlink {
+  align-self: flex-start; background: none; border: none; padding: 2px 0;
+  font: inherit; font-size: 12px; color: var(--accent); text-decoration: underline;
+  cursor: pointer;
+}
+.sync-card__body {
+  width: 100%; box-sizing: border-box; font: inherit; font-size: 13px; line-height: 1.5;
+  color: var(--text-primary); background: var(--bg-base);
+  border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px;
+  resize: vertical;
+}
+.sync-card__body:focus { outline: none; border-color: var(--accent); }
 .sync__apply-all {
   align-self: flex-start;
   padding: 8px 18px; font-size: 13px; font-weight: 600;

@@ -8,12 +8,14 @@ import {
   type SyncProposal,
 } from "./api";
 import { segmentIn } from "./motion";
+import { openExternal } from "./openExternal";
 import { toast } from "./toast";
 
 const TARGET_META: Record<string, { label: string; verb: string }> = {
   "apple-reminders": { label: "Reminders", verb: "Add reminder" },
   "apple-calendar": { label: "Calendar", verb: "Add event" },
   "apple-notes": { label: "Notes", verb: "Add note" },
+  notion: { label: "Notion", verb: "Create page" },
 };
 
 function formatWhen(iso?: string): string {
@@ -27,6 +29,13 @@ function formatWhen(iso?: string): string {
     hour: "numeric",
     minute: "2-digit",
   });
+}
+
+function metaText(proposal: SyncProposal): string {
+  if (proposal.kind === "note") return "summary, key points & action items";
+  if (proposal.kind === "page")
+    return "summary, key points, decisions & action items";
+  return proposal.body;
 }
 
 function EditableTitle({
@@ -77,6 +86,143 @@ function EditableTitle({
     >
       {proposal.title}
     </button>
+  );
+}
+
+function SyncCard({
+  proposal,
+  busy,
+  onApply,
+  onSkip,
+  onRename,
+  onEditBody,
+}: {
+  proposal: SyncProposal;
+  busy: boolean;
+  onApply: (proposal: SyncProposal) => void;
+  onSkip: (proposal: SyncProposal, undo: boolean) => void;
+  onRename: (proposal: SyncProposal, title: string) => void;
+  onEditBody: (proposal: SyncProposal, body: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [body, setBody] = useState(proposal.body);
+  const meta = TARGET_META[proposal.target];
+  const bodyEditable =
+    (proposal.kind === "note" || proposal.kind === "page") &&
+    proposal.status !== "applied";
+  const when =
+    proposal.kind === "event"
+      ? formatWhen(proposal.payload.start_iso)
+      : formatWhen(proposal.payload.due_iso);
+  const openLink =
+    proposal.status === "applied" &&
+    proposal.external_ref &&
+    proposal.external_ref.startsWith("http")
+      ? proposal.external_ref
+      : null;
+
+  const saveBody = () => {
+    setEditing(false);
+    const next = body.trim();
+    if (next && next !== proposal.body) onEditBody(proposal, next);
+  };
+
+  return (
+    <motion.div
+      className={
+        "sync-card" + (proposal.status === "skipped" ? " sync-card--skipped" : "")
+      }
+      variants={segmentIn}
+      initial="initial"
+      animate="animate"
+    >
+      <div className="sync-card__row">
+        <div className="sync-card__main">
+          <EditableTitle
+            proposal={proposal}
+            onSave={(title) => onRename(proposal, title)}
+          />
+          <span className="sync-card__meta">
+            {when && <>{when} · </>}
+            {metaText(proposal)}
+          </span>
+          {bodyEditable && (
+            <button
+              className="sync-card__editlink"
+              onClick={() => {
+                setBody(proposal.body);
+                setEditing((v) => !v);
+              }}
+            >
+              {editing ? "Hide content" : "Edit content"}
+            </button>
+          )}
+          {proposal.status === "failed" && proposal.error && (
+            <span className="sync-card__error">{proposal.error}</span>
+          )}
+        </div>
+        <div className="sync-card__actions">
+          {proposal.status === "applied" ? (
+            <>
+              <span className="sync-card__done">Added ✓</span>
+              {openLink && (
+                <button
+                  className="sync-card__link"
+                  onClick={() => openExternal(openLink)}
+                >
+                  Open in Notion ↗
+                </button>
+              )}
+            </>
+          ) : proposal.status === "skipped" ? (
+            <button
+              className="sync-card__skip"
+              disabled={busy}
+              onClick={() => onSkip(proposal, true)}
+            >
+              Undo skip
+            </button>
+          ) : (
+            <>
+              <button
+                className="sync-card__skip"
+                disabled={busy}
+                onClick={() => onSkip(proposal, false)}
+              >
+                Skip
+              </button>
+              <button
+                className="sync-card__apply"
+                disabled={busy}
+                onClick={() => onApply(proposal)}
+              >
+                {busy
+                  ? "Adding…"
+                  : proposal.status === "failed"
+                    ? "Retry"
+                    : (meta?.verb ?? "Add")}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+      {editing && (
+        <textarea
+          className="sync-card__body"
+          value={body}
+          rows={8}
+          autoFocus
+          onChange={(e) => setBody(e.target.value)}
+          onBlur={saveBody}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              setBody(proposal.body);
+              setEditing(false);
+            }
+          }}
+        />
+      )}
+    </motion.div>
   );
 }
 
@@ -168,6 +314,15 @@ export function SyncPanel({
       }
     });
 
+  const editBody = (proposal: SyncProposal, body: string) =>
+    withBusy(proposal.id, async () => {
+      try {
+        replace(await patchProposal(proposal.id, { body }));
+      } catch {
+        toast("Couldn't save that edit.");
+      }
+    });
+
   const applyAll = async () => {
     setApplyingAll(true);
     try {
@@ -214,75 +369,17 @@ export function SyncPanel({
             <h3 className="sync-group__title">
               {TARGET_META[target]?.label ?? target}
             </h3>
-            {items.map((proposal) => {
-              const busy = busyIds.has(proposal.id);
-              const when =
-                proposal.kind === "event"
-                  ? formatWhen(proposal.payload.start_iso)
-                  : formatWhen(proposal.payload.due_iso);
-              return (
-                <motion.div
-                  className={
-                    "sync-card" +
-                    (proposal.status === "skipped" ? " sync-card--skipped" : "")
-                  }
-                  key={proposal.id}
-                  variants={segmentIn}
-                  initial="initial"
-                  animate="animate"
-                >
-                  <div className="sync-card__main">
-                    <EditableTitle
-                      proposal={proposal}
-                      onSave={(title) => rename(proposal, title)}
-                    />
-                    <span className="sync-card__meta">
-                      {when && <>{when} · </>}
-                      {proposal.kind === "note"
-                        ? "summary, key points & action items"
-                        : proposal.body}
-                    </span>
-                    {proposal.status === "failed" && proposal.error && (
-                      <span className="sync-card__error">{proposal.error}</span>
-                    )}
-                  </div>
-                  <div className="sync-card__actions">
-                    {proposal.status === "applied" ? (
-                      <span className="sync-card__done">Added ✓</span>
-                    ) : proposal.status === "skipped" ? (
-                      <button
-                        className="sync-card__skip"
-                        disabled={busy}
-                        onClick={() => skip(proposal, true)}
-                      >
-                        Undo skip
-                      </button>
-                    ) : (
-                      <>
-                        <button
-                          className="sync-card__skip"
-                          disabled={busy}
-                          onClick={() => skip(proposal, false)}
-                        >
-                          Skip
-                        </button>
-                        <button
-                          className="sync-card__apply"
-                          disabled={busy}
-                          onClick={() => apply(proposal)}
-                        >
-                          {busy
-                            ? "Adding…"
-                            : proposal.status === "failed"
-                              ? "Retry"
-                              : (TARGET_META[target]?.verb ?? "Add")}
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </motion.div>
-              );
-            })}
+            {items.map((proposal) => (
+              <SyncCard
+                key={proposal.id}
+                proposal={proposal}
+                busy={busyIds.has(proposal.id)}
+                onApply={apply}
+                onSkip={skip}
+                onRename={rename}
+                onEditBody={editBody}
+              />
+            ))}
           </section>
         ))}
         {open.length > 1 && (

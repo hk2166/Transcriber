@@ -11,21 +11,7 @@ import {
 } from "./api";
 import { toast } from "./toast";
 
-const isTauri =
-  typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-
-async function openExternal(url: string) {
-  if (isTauri) {
-    try {
-      const { openUrl } = await import("@tauri-apps/plugin-opener");
-      await openUrl(url);
-      return;
-    } catch {
-      // fall through to window.open
-    }
-  }
-  window.open(url, "_blank", "noopener");
-}
+import { openExternal } from "./openExternal";
 
 /**
  * Bring-your-own-credentials Google connection. The user runs a one-time

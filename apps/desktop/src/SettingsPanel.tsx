@@ -19,6 +19,7 @@ import {
 import { confirmDialog } from "./confirm";
 import { EngineSelector } from "./EngineSelector";
 import { GoogleConnect } from "./GoogleConnect";
+import { NotionConnect } from "./NotionConnect";
 import { IconClose } from "./Icons";
 const SOURCES: AudioSource[] = ["mic", "system", "both"];
 const REFINE_MODELS = [
@@ -377,6 +378,7 @@ export function SettingsPanel({
             <label className="settings__toggle" key={integration.id}>
               <input
                 type="checkbox"
+                disabled={!integration.configured}
                 checked={
                   settings.integrations_enabled[integration.id] ?? true
                 }
@@ -389,11 +391,21 @@ export function SettingsPanel({
                   })
                 }
               />
-              <span>{integration.label}</span>
+              <span>
+                {integration.label}
+                {integration.configured ? "" : " (set up below)"}
+              </span>
             </label>
           ))}
         </div>
 
+        <NotionConnect
+          settings={settings}
+          patch={patch}
+          configured={
+            integrations.find((i) => i.id === "notion")?.configured ?? false
+          }
+        />
         <GoogleConnect />
         </div>
         </div>
