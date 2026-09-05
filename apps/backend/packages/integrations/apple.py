@@ -95,6 +95,7 @@ def _parse_iso(value: str) -> datetime:
 class AppleReminders:
     id: str = "apple-reminders"
     label: str = "Apple Reminders"
+    needs_token: bool = False
 
     def available(self) -> bool:
         return True  # ships with macOS
@@ -133,6 +134,7 @@ class AppleReminders:
 class AppleCalendar:
     id: str = "apple-calendar"
     label: str = "Apple Calendar"
+    needs_token: bool = False
 
     def available(self) -> bool:
         return True
@@ -179,6 +181,7 @@ class AppleCalendar:
 class AppleNotes:
     id: str = "apple-notes"
     label: str = "Apple Notes"
+    needs_token: bool = False
 
     def available(self) -> bool:
         return True

@@ -23,7 +23,9 @@ logger = logging.getLogger(__name__)
 _lock = threading.Lock()
 _cached: Settings | None = None
 
-#: Keychain service that holds LLM provider API keys (account = provider id).
+#: Keychain service holding every pasted secret (account = provider id): the LLM
+#: provider API keys and the Notion token (account "notion"). Don't rename it —
+#: stored secrets are addressed by this string and would be orphaned.
 LLM_KEYCHAIN_SERVICE = "com.hemant.confab.llm"
 #: What settings.json stores in place of a key that lives in the Keychain.
 KEY_SENTINEL = "keychain"
@@ -52,6 +54,9 @@ class Settings(BaseModel):
     #: Missing key = enabled: proposing is local-only, and nothing is ever
     #: sent without a per-item approval (docs/INTEGRATIONS.md).
     integrations_enabled: dict[str, bool] = {}
+    #: Notion parent for filed pages: a pasted page/database link or id;
+    #: parse_parent_id normalises it on use (empty = Notion not configured).
+    notion_parent: str = ""
     #: Which LLM powers summaries/titles/chat. "ollama" keeps everything
     #: on-device; any other provider sends transcript text to that API.
     llm_provider: str = "ollama"

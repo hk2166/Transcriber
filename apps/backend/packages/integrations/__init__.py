@@ -18,12 +18,17 @@ from packages.integrations.base import (
     MeetingContext,
     ProposalDraft,
 )
+from packages.integrations.notion import Notion, NotionCredentials
 
-#: Registry, in the order the UI shows them. Phase 2 adds Notion here.
+#: The one Notion instance; proposal_service injects its credentials provider.
+NOTION = Notion()
+
+#: Registry, in the order the UI shows them.
 INTEGRATIONS: list[Integration] = [
     AppleReminders(),
     AppleCalendar(),
     AppleNotes(),
+    NOTION,
 ]
 
 INTEGRATIONS_BY_ID = {integration.id: integration for integration in INTEGRATIONS}
@@ -43,6 +48,9 @@ __all__ = [
     "Integration",
     "IntegrationError",
     "MeetingContext",
+    "NOTION",
+    "Notion",
+    "NotionCredentials",
     "ProposalDraft",
     "get_integration",
 ]

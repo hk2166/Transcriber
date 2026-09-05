@@ -1,4 +1,8 @@
-"""Sync proposals: review, edit, skip, and — only on explicit approval — apply."""
+"""Sync proposals: review, edit, skip, and — only on explicit approval — apply.
+
+Also the integrations registry the Settings UI reads, and the Notion
+connection test — a read-only check that sends no meeting content.
+"""
 
 from __future__ import annotations
 
@@ -10,7 +14,7 @@ from pydantic import BaseModel
 
 import proposal_service
 from database import get_db
-from packages.integrations import INTEGRATIONS
+from packages.integrations import INTEGRATIONS, IntegrationError, notion
 from packages.storage import (
     Proposal,
     get_meeting,
@@ -19,24 +23,54 @@ from packages.storage import (
     set_proposal_status,
     update_proposal,
 )
-from settings import get_settings
+from settings import Settings, get_settings, resolve_api_key
 
 router = APIRouter(tags=["proposals"])
 
 
 @router.get("/integrations")
 def list_integrations() -> list[dict]:
-    """Registry for Settings: what exists, what's available, what's enabled."""
+    """Registry for Settings: what exists, what's available/enabled, what needs
+    setup. ``configured`` mirrors ``available()``; ``hint`` explains an
+    unconfigured target (only Notion needs a token today)."""
     toggles = get_settings().integrations_enabled
-    return [
-        {
-            "id": integration.id,
-            "label": integration.label,
-            "available": integration.available(),
-            "enabled": toggles.get(integration.id, True),
-        }
-        for integration in INTEGRATIONS
-    ]
+    rows = []
+    for integration in INTEGRATIONS:
+        available = integration.available()
+        hint = None if available or integration.id != "notion" else notion.SETUP_HINT
+        rows.append(
+            {
+                "id": integration.id,
+                "label": integration.label,
+                "available": available,
+                "enabled": toggles.get(integration.id, True),
+                "needs_token": integration.needs_token,
+                "configured": available,
+                "hint": hint,
+            }
+        )
+    return rows
+
+
+@router.post("/integrations/notion/test")
+async def test_notion(candidate: Settings) -> dict:
+    """Validate an unsaved Notion token + parent before Save. No meeting content
+    leaves: this only identifies the bot and resolves the parent."""
+    token = resolve_api_key(candidate, "notion")
+    parent = candidate.notion_parent
+    if not token.strip() or not parent.strip():
+        return {"ok": False, "error": notion.SETUP_HINT}
+    try:
+        info = await asyncio.to_thread(notion.whoami, token)
+        resolved = await asyncio.to_thread(notion.resolve_parent, token, parent)
+    except IntegrationError as exc:
+        return {"ok": False, "error": str(exc)}
+    return {
+        "ok": True,
+        "bot_name": info["bot_name"],
+        "workspace_name": info["workspace_name"],
+        "parent": {"kind": resolved.kind, "title": resolved.title},
+    }
 
 
 @router.get("/meetings/{meeting_id}/proposals")

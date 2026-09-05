@@ -31,6 +31,8 @@ class MeetingContext:
     decisions: list[str] = field(default_factory=list)
     #: LLM-extracted follow-ups: {"title", "start_iso", "duration_min"}.
     events: list[dict] = field(default_factory=list)
+    #: Kept last so positional constructions written before it stay valid.
+    open_questions: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -54,6 +56,9 @@ class AppliedRef:
 class Integration(Protocol):
     id: str
     label: str
+    #: True for targets that need a pasted secret before they can propose;
+    #: Settings shows "set up below" until ``available()`` is true.
+    needs_token: bool
 
     def available(self) -> bool:
         """Target reachable (app installed / token configured)."""

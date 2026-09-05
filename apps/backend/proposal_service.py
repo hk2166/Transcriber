@@ -14,8 +14,10 @@ import llm
 from database import get_db
 from packages.integrations import (
     INTEGRATIONS,
+    NOTION,
     IntegrationError,
     MeetingContext,
+    NotionCredentials,
     get_integration,
 )
 from packages.integrations.extractor import extract_events
@@ -29,11 +31,26 @@ from packages.storage import (
     mark_proposals_stale,
     set_proposal_result,
 )
-from settings import get_settings
+from settings import get_settings, resolve_api_key
 
 logger = logging.getLogger(__name__)
 
 __all__ = ["apply_proposal", "enabled_integrations", "propose_for_meeting"]
+
+
+def _notion_credentials() -> NotionCredentials | None:
+    """The Notion token + parent from settings, or None when unconfigured."""
+    settings = get_settings()
+    token = resolve_api_key(settings, "notion")
+    parent = settings.notion_parent
+    if not token.strip() or not parent.strip():
+        return None
+    return NotionCredentials(token=token, parent=parent)
+
+
+# The one app-level wire: it keeps packages/integrations importable without the
+# app (no settings/keychain imports there) while Notion still reads live config.
+NOTION.credentials = _notion_credentials
 
 
 def enabled_integrations() -> list:
@@ -60,6 +77,7 @@ def _build_context(meeting_id: int) -> MeetingContext | None:
         action_items=summary.action_items,
         key_points=summary.key_points,
         decisions=summary.decisions,
+        open_questions=summary.open_questions,
     )
 
 
