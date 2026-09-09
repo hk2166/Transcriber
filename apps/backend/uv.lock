@@ -419,6 +419,7 @@ source = { virtual = "." }
 dependencies = [
     { name = "fastapi" },
     { name = "faster-whisper" },
+    { name = "httpx" },
     { name = "ollama" },
     { name = "onnx-asr" },
     { name = "pyannote-audio" },
@@ -433,7 +434,6 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "httpx" },
     { name = "huggingface-hub" },
     { name = "pyinstaller" },
     { name = "pytest" },
@@ -444,6 +444,7 @@ dev = [
 requires-dist = [
     { name = "fastapi", specifier = ">=0.138.0" },
     { name = "faster-whisper", specifier = ">=1.2.1" },
+    { name = "httpx", specifier = ">=0.27.0" },
     { name = "ollama", specifier = ">=0.6.2" },
     { name = "onnx-asr", specifier = ">=0.12.0" },
     { name = "pyannote-audio", specifier = ">=4.0.5" },
@@ -458,7 +459,6 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "httpx", specifier = ">=0.27.0" },
     { name = "huggingface-hub", specifier = ">=1.20.1" },
     { name = "pyinstaller", specifier = ">=6.22.2" },
     { name = "pytest", specifier = ">=9.1.1" },

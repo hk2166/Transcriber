@@ -1,10 +1,11 @@
 # Integrations — design (propose → approve → apply)
 
-*Status: Phase 1 (Apple Reminders/Calendar/Notes) SHIPPED — Aug 2026. Verified
-end-to-end against real Apple apps. Phase 2 (Notion) and 3 (OAuth) remain
-design-only. One deviation from this doc: no separate `approved` status —
-clicking Apply IS the approval, so statuses are proposed | applied | skipped |
-failed | stale.*
+*Status: Phase 1 (Apple Reminders/Calendar/Notes) SHIPPED — Aug 2026, verified
+end-to-end against real Apple apps. Phase 2 (Notion) SHIPPED — Sep 2026: files
+an approved meeting summary as a Notion page. Phase 3 (Google apply targets,
+Slack) remains design-only. One deviation from this doc: no separate `approved`
+status — clicking Apply IS the approval, so statuses are proposed | applied |
+skipped | failed | stale.*
 
 Connect Confab to the apps where meeting outcomes live — Apple Reminders,
 Calendar, Notes, then Notion, later Google/Slack — **without breaking the
@@ -132,11 +133,12 @@ payloads, commit per call): `insert_proposals`, `get_proposals(meeting_id)`,
 
 | Route | Purpose |
 | --- | --- |
-| `GET /integrations` | Registry for Settings: `[{id, label, available, enabled, needs_token, configured}]` |
+| `GET /integrations` | Registry for Settings: `[{id, label, available, enabled, needs_token, configured, hint}]`. `configured` mirrors `available()`; `hint` (only when unconfigured) says what to set up |
+| `POST /integrations/notion/test` | Validate an unsaved Notion token + parent (candidate `Settings` body) → `{ok, bot_name, workspace_name, parent:{kind,title}}` or `{ok:false, error}`. Sends no meeting content |
 | `GET /meetings/{id}/proposals` | Proposal cards for the Sync tab |
-| `PATCH /proposals/{id}` | Edit `{title, body, payload}` and/or set `{status: approved\|skipped}` |
+| `PATCH /proposals/{id}` | Edit `{title, body, payload}` and/or set `{status: proposed\|skipped}` |
 | `POST /proposals/{id}/apply` | Apply one (sets `applied` + `external_ref`, or `failed` + `error`) |
-| `POST /meetings/{id}/proposals/apply` | Apply every `approved` proposal; per-item results |
+| `POST /meetings/{id}/proposals/apply` | Apply every open (`proposed`/`failed`) proposal; per-item results |
 
 Apply runs the integration in a worker thread (AppleScript/HTTP are blocking),
 per item, so one failure never poisons the batch.
@@ -145,8 +147,9 @@ per item, so one failure never poisons the batch.
 
 ```python
 integrations_enabled: dict[str, bool] = {}    # {"apple-reminders": true, ...}
-notion_parent: str = ""                       # page/database id or pasted URL (Phase 2)
-# Notion token lives in the existing chmod-600 api_keys dict: api_keys["notion"]
+notion_parent: str = ""                       # page/database link or id; parse_parent_id normalises it
+# Notion token lives in api_keys["notion"], stored via the Keychain sentinel
+# (same machinery as LLM keys); redacted in GET /settings.
 ```
 
 ---
@@ -179,13 +182,29 @@ automation prompt ("Confab wants to control Reminders"). Requires:
   the riskiest assumption in this design. Denied permission surfaces as a
   clear per-card error with a "fix in System Settings" hint.
 
-### Phase 2 — Notion (one pasted token, no OAuth)
+### Phase 2 — Notion (one pasted token, no OAuth) — SHIPPED Sep 2026
 
-- Internal-integration token pasted in Settings (stored in `api_keys["notion"]`,
-  chmod-600 file, redacted in `GET /settings` — machinery already exists).
-- User pastes a parent page/database URL; we extract the id.
-- Apply = `POST /v1/pages` with the summary as blocks (markdown → Notion
-  blocks, small local converter; httpx is already a dependency).
+- Internal-connection token pasted in Settings, stored in `api_keys["notion"]`
+  through the existing Keychain sentinel (redacted in `GET /settings`; a blank
+  or sentinel PUT means unchanged). The parent page/database link goes in
+  `notion_parent`; `parse_parent_id` extracts the 32-hex id.
+- `Notion-Version: 2026-03-11` is pinned. The page body is sent as the
+  `markdown` parameter on `POST /v1/pages` — no markdown→blocks converter and
+  no 100-block batching. A tiny line encoder keeps the user's headings/bullets
+  and backslash-escapes syntax so an LLM's stray `*`/`[` renders literally.
+- Parent resolution runs on every use, never cached: `GET /pages/{id}` → page
+  parent; on 404, `GET /databases/{id}` → its single data source →
+  `GET /data_sources/{id}` to find the `title`-typed property the page title
+  goes in (more than one data source → ask for the data-source link).
+- One create request is the commit point; the returned page URL is stored in
+  `external_ref`, so the Sync card offers "Open in Notion" and a second click
+  is the existing idempotent no-op.
+- `httpx` (already used by the Google client) is now a declared runtime
+  dependency; the frozen bundle picks it up via PyInstaller import analysis
+  (pure Python; `certifi` already bundled).
+- The package stays app-free: `proposal_service` injects token+parent via a
+  `credentials` callable, and all HTTP goes through one monkeypatchable
+  `_request`.
 
 ### Phase 3 — Google (front door SHIPPED; apply targets next)
 
@@ -261,6 +280,15 @@ An **Integrations** section: toggle per target; Notion shows token field
 | Apply crashes mid-batch | Per-item isolation; each card shows its own result |
 | Meeting re-summarised | Old un-applied proposals → `stale` (hidden); applied ones untouched |
 | Duplicate apply click | `applied` status checked server-side; second apply is a no-op returning the ref |
+| Notion token rejected (401) | Card → `failed`: "Notion rejected the token. Paste a fresh installation token in Settings → Notion." |
+| Notion connection can't insert (403) | "This connection can't create pages here. In Notion's developer portal, enable Insert content for it, then retry." |
+| Notion parent not shared/moved (404 on page and database) | "Confab can't see that page. In Notion, open it → ••• → Connections → add your Confab connection, then retry." |
+| Notion database has several data sources | "This database has more than one data source. Paste the data source link instead (Manage data sources → Copy data source ID)." |
+| Pasted text isn't a Notion link | Settings test: "That doesn't look like a Notion page or database link." |
+| Notion rate-limited (429) | One retry after `Retry-After` (≤5 s); if it repeats: "Notion is rate-limiting requests. Try again in a moment." |
+| Notion payload rejected (400) | Notion's own message, trimmed to 300 chars |
+| Notion offline / timeout | "Couldn't reach Notion. Check your connection and retry." |
+| Notion down / overloaded (5xx, 529) | "Notion is having trouble right now. Retry in a minute." |
 
 ## 8. Testing
 
@@ -271,6 +299,13 @@ An **Integrations** section: toggle per target; Notion shows token field
   injected so tests never touch real apps.
 - Repository + endpoint tests on in-memory DB (house pattern).
 - Manual packaged-build check: TCC prompt attribution (the §5 risk).
+- `notion.py`: link/id parsing, the markdown line encoder + escaping, propose
+  sections, parent resolution (page / database / data-source, ambiguous,
+  unshared), apply against a fake transport, and the `_request` error-mapping
+  table.
+- `test_proposals_router.py`: the `/integrations` registry fields, PATCH
+  edit/skip/applied-lock, apply one/all with a fake integration, and the Notion
+  test route — house TestClient + in-memory-DB pattern.
 
 ## 9. Build order
 
@@ -279,6 +314,8 @@ An **Integrations** section: toggle per target; Notion shows token field
 2. **P1b** — Sync tab UI + banner/toast + Settings toggles.
 3. **P1c** — `apple.py` apply + packaging strings/entitlement + TCC check.
 4. **P1d** — `extractor.py` calendar events (LLM structured output).
-5. **P2** — Notion. **P3** — Google/Slack on demand.
+5. **P2** — Notion (SHIPPED Sep 2026): P2a pure module, P2b app wiring +
+   router tests, P2c desktop UI, P2d deps/docs/QA. **P3** — Google apply
+   targets / Slack on demand.
 
 Each step lands runnable and tested; P1a–P1d is roughly a day of focused work.
