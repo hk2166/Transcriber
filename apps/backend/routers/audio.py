@@ -2,13 +2,23 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import logging
+import os
+import shutil
+import tempfile
+from datetime import datetime
+from typing import Annotated
+from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 
-from packages.audio import AudioCapture, routing
+import postprocess_job
+from database import get_db
+from packages.audio import AudioCapture, decode_to_wav, default_recordings_dir, routing
+from packages.storage import Meeting, create_meeting, end_meeting, get_meeting, set_meeting_title
 from sessions import AudioSource, SessionConflict, SessionNotFound, manager
 
 logger = logging.getLogger(__name__)
@@ -163,3 +173,45 @@ async def stream_audio(websocket: WebSocket, session_id: str) -> None:
             )
     except WebSocketDisconnect:
         logger.info("WebSocket client left session %s.", session_id)
+
+
+def _save_upload(upload: UploadFile, dst_path: str) -> None:
+    """Stream the upload to disk in chunks (never load the whole file in RAM)."""
+    with open(dst_path, "wb") as out:
+        shutil.copyfileobj(upload.file, out, length=1024 * 1024)
+
+
+@router.post("/import", response_model=Meeting)
+async def import_audio(file: Annotated[UploadFile, File()]) -> Meeting:
+    """Import an audio/video file as a meeting: decode → transcribe → diarize →
+    summarize → index → propose, exactly like a recording. Returns the meeting
+    row in ``processing`` status; the UI polls it to ``ready``."""
+    suffix = os.path.splitext(file.filename or "")[1][:16]
+    tmp_fd, tmp_path = tempfile.mkstemp(suffix=suffix)
+    os.close(tmp_fd)
+    wav_path = default_recordings_dir() / f"{uuid4().hex}.wav"
+    try:
+        await asyncio.to_thread(_save_upload, file, tmp_path)
+        # Decode any PyAV-readable audio/video to the 16 kHz mono WAV the
+        # pipeline expects; an undecodable file (no audio track) is a 400.
+        try:
+            await asyncio.to_thread(decode_to_wav, tmp_path, str(wav_path))
+        except Exception as exc:
+            raise HTTPException(
+                status_code=400,
+                detail="Couldn't read audio from that file. Use an audio or "
+                "video file with an audio track (mp3, m4a, wav, mp4, mov…).",
+            ) from exc
+    finally:
+        os.unlink(tmp_path)
+
+    db = get_db()
+    meeting_id = create_meeting(
+        db, source="import", wav_path=str(wav_path), started_at=datetime.now()
+    )
+    title = os.path.splitext(os.path.basename(file.filename or ""))[0] or "Imported recording"
+    set_meeting_title(db, meeting_id, title)
+    end_meeting(db, meeting_id, ended_at=datetime.now(), status="processing")
+    postprocess_job.schedule_import(meeting_id, str(wav_path))
+    logger.info("Imported %r as meeting %d.", file.filename, meeting_id)
+    return get_meeting(db, meeting_id)

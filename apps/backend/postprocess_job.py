@@ -178,11 +178,55 @@ async def _summarize(meeting_id: int, segments: list[Segment]) -> None:
         set_meeting_title(db, meeting_id, title)
 
 
+async def _process_segments(meeting_id: int, wav_path: str) -> None:
+    """Diarize → summarize → index a meeting that already has segments.
+
+    Shared by the recording pipeline (after the refine pass) and the import
+    pipeline (after the initial transcription). Each stage degrades on its own.
+    Runs inside a held model slot.
+    """
+    db = get_db()
+    try:
+        await _diarize(meeting_id, wav_path, get_segments(db, meeting_id))
+    except Exception:
+        logger.exception("Diarization failed for meeting %d.", meeting_id)
+    # The diarizer is deliberately NOT released here: in dev it's PyTorch,
+    # whose allocator never returns RSS to the OS (measured), so releasing
+    # only forces a costly reload; in the packaged app diarization runs in a
+    # subprocess that frees on exit anyway.
+
+    # Reload so the transcript carries the speaker attributions just written.
+    segments = get_segments(db, meeting_id)
+    try:
+        if get_settings().auto_summarize:
+            await _summarize(meeting_id, segments)
+    except OllamaUnavailable:
+        logger.warning("Ollama unavailable — no summary for meeting %d.", meeting_id)
+    except Exception:
+        logger.exception("Summary failed for meeting %d.", meeting_id)
+
+    # Lazy import keeps the embedder off the live-capture import path.
+    import search_index
+
+    try:
+        await asyncio.to_thread(search_index.index_meeting, meeting_id)
+    except Exception:
+        logger.exception("Indexing failed for meeting %d.", meeting_id)
+    finally:
+        await asyncio.to_thread(search_index.release_embedder)
+
+
+async def _finalize(meeting_id: int) -> None:
+    """Link calendar attendees, propose sync items, and mark ``ready``."""
+    await _link_calendar_attendees(meeting_id)
+    await _propose_sync(meeting_id)
+    set_meeting_status(get_db(), meeting_id, "ready")
+
+
 async def run_postprocess(meeting_id: int, wav_path: str) -> None:
     """Diarize then summarize a finished meeting; always end in ``ready``."""
     db = get_db()
-    segments = get_segments(db, meeting_id)
-    if not segments:
+    if not get_segments(db, meeting_id):
         set_meeting_status(db, meeting_id, "ready")
         return
 
@@ -191,54 +235,61 @@ async def run_postprocess(meeting_id: int, wav_path: str) -> None:
     # reconciliation resuming a backlog — run one at a time instead of loading
     # every model at once and exhausting memory.
     async with model_gate.slot(f"postprocess:{meeting_id}"):
-        # Each stage loads a heavy model; release it before the next loads so
-        # only one is resident at a time (crash guard on low-memory machines).
         # Re-transcribe the whole recording for a cleaner transcript, then
         # diarize the *refined* text. Runs first so everything builds on it.
         if get_settings().refine_transcript:
             try:
-                if await _refine(meeting_id, wav_path):
-                    segments = get_segments(db, meeting_id)
+                await _refine(meeting_id, wav_path)
             except Exception:
                 logger.exception("Transcript refine failed for meeting %d.", meeting_id)
             finally:
                 # Free the refine Whisper before the diarizer loads on top of it.
                 await asyncio.to_thread(_release_refine_transcriber)
+        await _process_segments(meeting_id, wav_path)
 
-        try:
-            await _diarize(meeting_id, wav_path, segments)
-        except Exception:
-            logger.exception("Diarization failed for meeting %d.", meeting_id)
-        # The diarizer is deliberately NOT released here: in dev it's PyTorch,
-        # whose allocator never returns RSS to the OS (measured), so releasing
-        # only forces a costly reload; in the packaged app diarization runs in a
-        # subprocess that frees on exit anyway.
-
-        # Reload so the transcript carries the speaker attributions just written.
-        segments = get_segments(db, meeting_id)
-        try:
-            if get_settings().auto_summarize:
-                await _summarize(meeting_id, segments)
-        except OllamaUnavailable:
-            logger.warning("Ollama unavailable — no summary for meeting %d.", meeting_id)
-        except Exception:
-            logger.exception("Summary failed for meeting %d.", meeting_id)
-
-        # Lazy import keeps the embedder off the live-capture import path.
-        import search_index
-
-        try:
-            await asyncio.to_thread(search_index.index_meeting, meeting_id)
-        except Exception:
-            logger.exception("Indexing failed for meeting %d.", meeting_id)
-        finally:
-            await asyncio.to_thread(search_index.release_embedder)
-
-    await _link_calendar_attendees(meeting_id)
-    await _propose_sync(meeting_id)
-
-    set_meeting_status(db, meeting_id, "ready")
+    await _finalize(meeting_id)
     logger.info("Post-processing complete for meeting %d.", meeting_id)
+
+
+async def _transcribe_import(meeting_id: int, wav_path: str) -> bool:
+    """Transcribe an imported file into the meeting's segments (mandatory).
+
+    Unlike the recording path there is no live transcript to refine — this IS
+    the transcript. Uses the same full-file beam-search pass. Returns whether
+    any segments were written.
+    """
+    import os
+
+    if not wav_path or not os.path.exists(wav_path):
+        logger.warning("No audio for import %d — nothing to transcribe.", meeting_id)
+        return False
+    transcriber = await asyncio.to_thread(
+        _get_refine_transcriber, get_settings().refine_model
+    )
+    segments = await asyncio.to_thread(transcriber.transcribe_file, wav_path)
+    if not segments:
+        return False
+    count = replace_segments(get_db(), meeting_id, segments)
+    logger.info("Imported meeting %d: transcribed %d segments.", meeting_id, count)
+    return True
+
+
+async def run_import(meeting_id: int, wav_path: str) -> None:
+    """Process an uploaded audio/video file: transcribe → diarize → summarize
+    → index → propose → ready. Mirrors run_postprocess but transcribes first."""
+    async with model_gate.slot(f"import:{meeting_id}"):
+        try:
+            transcribed = await _transcribe_import(meeting_id, wav_path)
+        except Exception:
+            logger.exception("Import transcription failed for meeting %d.", meeting_id)
+            transcribed = False
+        finally:
+            await asyncio.to_thread(_release_refine_transcriber)
+        if transcribed:
+            await _process_segments(meeting_id, wav_path)
+
+    await _finalize(meeting_id)
+    logger.info("Import processing complete for meeting %d.", meeting_id)
 
 
 async def _link_calendar_attendees(meeting_id: int) -> None:
@@ -349,6 +400,11 @@ def reconcile_interrupted_meetings() -> None:
 def schedule(meeting_id: int, wav_path: str) -> None:
     """Fire-and-forget full post-processing on the running event loop."""
     _track(asyncio.create_task(run_postprocess(meeting_id, wav_path)))
+
+
+def schedule_import(meeting_id: int, wav_path: str) -> None:
+    """Fire-and-forget import processing (transcribe → … → ready)."""
+    _track(asyncio.create_task(run_import(meeting_id, wav_path)))
 
 
 def schedule_summary(meeting_id: int) -> None:

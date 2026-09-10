@@ -37,6 +37,25 @@ def default_recordings_dir() -> Path:
     return path
 
 
+def decode_to_wav(src_path: str, dst_path: str, sample_rate: int = 16000) -> float:
+    """Decode any PyAV-readable audio/video file to 16 kHz mono PCM-16 WAV.
+
+    Reuses faster-whisper's bundled PyAV decoder (the same one transcription
+    uses), so mp3/m4a/aac/ogg and the audio track of mp4/mov all work with no
+    new dependency. The result is exactly the WAV shape the transcriber,
+    diarizer, and audio playback already expect. Raises on a file with no
+    decodable audio. Returns the clip duration in seconds.
+    """
+    import soundfile as sf
+    from faster_whisper.audio import decode_audio  # heavy import — keep it local
+
+    audio = decode_audio(src_path, sampling_rate=sample_rate)  # mono float32 [-1, 1]
+    if audio is None or len(audio) == 0:
+        raise ValueError("No decodable audio in the file.")
+    sf.write(dst_path, audio, sample_rate, subtype="PCM_16")
+    return len(audio) / sample_rate
+
+
 class SessionRecorder:
     """Writes audio blocks to a 16-bit PCM WAV file without blocking the caller.
 

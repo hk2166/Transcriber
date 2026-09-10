@@ -818,6 +818,14 @@ button.status-line--fix:disabled { cursor: default; opacity: 0.7; }
 .nav-actions:disabled { opacity: 0.5; cursor: default; }
 
 /* Pause / resume next to the record button. */
+.import-button {
+  padding: 8px 16px; font-size: 13px; font-weight: 500;
+  color: var(--text-secondary); background: transparent;
+  border: 1px solid var(--border); border-radius: 999px; cursor: pointer;
+  transition: border-color 150ms ease, color 150ms ease, background 150ms ease;
+}
+.import-button:hover:not(:disabled) { border-color: var(--border-strong); color: var(--text-primary); background: var(--bg-hover); }
+.import-button:disabled { opacity: 0.55; cursor: default; }
 .pause-button {
   padding: 8px 16px;
   font-size: 13px; font-weight: 500;

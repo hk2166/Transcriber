@@ -40,7 +40,7 @@ __all__ = [
     "manager",
 ]
 
-AudioSource = Literal["mic", "system", "both"]
+AudioSource = Literal["mic", "system", "both", "import"]
 
 #: Stream buffer: 256 blocks ≈ 16 s of audio. Overflow drops WebSocket
 #: audio only — the recorder tee always receives every block.

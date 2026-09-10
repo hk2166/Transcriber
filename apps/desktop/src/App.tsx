@@ -10,6 +10,7 @@ import {
   getMeetingProposals,
   getMeetingSegments,
   getMeetings,
+  importAudio,
   getMeetingSpeakers,
   getMeetingSummary,
   getSettings,
@@ -61,12 +62,14 @@ const SOURCE_HINT: Record<AudioSource, string> = {
   mic: "Captures your microphone",
   system: "Captures system audio via BlackHole",
   both: "Captures mic + system audio",
+  import: "Imported from a file",
 };
 
 const SOURCE_LABEL: Record<AudioSource, string> = {
   mic: "Mic",
   system: "System",
   both: "Mic + System",
+  import: "Imported",
 };
 
 function formatElapsed(ms: number): string {
@@ -113,6 +116,8 @@ function App() {
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [connected, setConnected] = useState(true);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [importing, setImporting] = useState(false);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
   const [pastSegments, setPastSegments] = useState<TranscriptSegment[]>([]);
   const [pastSpeakers, setPastSpeakers] = useState<Speaker[]>([]);
   const [pastSummary, setPastSummary] = useState<MeetingSummary | null>(null);
@@ -235,6 +240,20 @@ function App() {
       setPastSpeakers([]);
       setPastSummary(null);
       toast("Couldn't load that meeting.");
+    }
+  };
+
+  const handleImport = async (file: File) => {
+    setImporting(true);
+    try {
+      const meeting = await importAudio(file);
+      await refreshMeetings();
+      await selectMeeting(meeting.id);
+      toast(`Importing “${meeting.title}” — transcribing…`);
+    } catch {
+      toast("Couldn't import that file.");
+    } finally {
+      setImporting(false);
     }
   };
 
@@ -879,6 +898,30 @@ function App() {
                 busy={busy}
                 onClick={handleToggle}
               />
+
+              {idle && (
+                <>
+                  <button
+                    className="import-button"
+                    onClick={() => importInputRef.current?.click()}
+                    disabled={importing}
+                    title="Transcribe an audio or video file"
+                  >
+                    {importing ? "Importing…" : "Import file"}
+                  </button>
+                  <input
+                    ref={importInputRef}
+                    type="file"
+                    accept="audio/*,video/mp4,video/quicktime,video/x-m4v"
+                    hidden
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      e.target.value = "";
+                      if (file) handleImport(file);
+                    }}
+                  />
+                </>
+              )}
 
               {sessionLive && (
                 <button

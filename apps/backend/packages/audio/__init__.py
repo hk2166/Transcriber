@@ -5,10 +5,14 @@ and system loopback (BlackHole) devices, a mixed mic + system capture, and
 a non-blocking WAV session recorder.
 """
 
+from packages.audio import routing
 from packages.audio.capture import AudioCapture, MicrophoneCapture, SystemAudioCapture
 from packages.audio.mixer import MixedAudioCapture
-from packages.audio.recorder import SessionRecorder, default_recordings_dir
-from packages.audio import routing
+from packages.audio.recorder import (
+    SessionRecorder,
+    decode_to_wav,
+    default_recordings_dir,
+)
 
 __all__ = [
     "routing",
@@ -17,5 +21,6 @@ __all__ = [
     "MixedAudioCapture",
     "SessionRecorder",
     "SystemAudioCapture",
+    "decode_to_wav",
     "default_recordings_dir",
 ]

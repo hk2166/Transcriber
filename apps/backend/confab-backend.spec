@@ -6,6 +6,9 @@ datas = [('packages/storage/migrations', 'packages/storage/migrations')]
 binaries = []
 hiddenimports = []
 hiddenimports += collect_submodules('uvicorn')
+# FastAPI imports python-multipart lazily (for the /audio/import upload),
+# so static analysis misses it — pin both module names it may use.
+hiddenimports += ['multipart', 'python_multipart']
 tmp_ret = collect_all('faster_whisper')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 tmp_ret = collect_all('ctranslate2')

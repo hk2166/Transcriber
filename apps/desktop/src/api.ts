@@ -1,6 +1,6 @@
 import { API_BASE } from "./config";
 
-export type AudioSource = "mic" | "system" | "both";
+export type AudioSource = "mic" | "system" | "both" | "import";
 
 export interface StartResponse {
   session_id: string;
@@ -315,6 +315,16 @@ export function enableAudioRouting(): Promise<AudioRouting> {
 
 export function resetAllData(): Promise<{ reset: boolean }> {
   return postJson<{ reset: boolean }>("/system/reset");
+}
+
+/** Upload an audio/video file; it is transcribed like a recording.
+ *  Returns the new meeting (status "processing") to select and poll. */
+export async function importAudio(file: File): Promise<Meeting> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch(`${API_BASE}/audio/import`, { method: "POST", body: form });
+  if (!res.ok) throw await readError(res);
+  return (await res.json()) as Meeting;
 }
 
 export function getMeetings(): Promise<Meeting[]> {
