@@ -19,6 +19,7 @@ import {
 import { confirmDialog } from "./confirm";
 import { EngineSelector } from "./EngineSelector";
 import { GoogleConnect } from "./GoogleConnect";
+import { HostedConnect } from "./HostedConnect";
 import { NotionConnect } from "./NotionConnect";
 import { IconClose } from "./Icons";
 const SOURCES: AudioSource[] = ["mic", "system", "both"];
@@ -208,6 +209,8 @@ export function SettingsPanel({
                 ))}
               </select>
             </label>
+          ) : settings.llm_provider === "confab-hosted" ? (
+            <HostedConnect />
           ) : (
             <>
               {provider?.needs_key && (

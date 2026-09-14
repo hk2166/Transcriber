@@ -260,6 +260,27 @@ export interface LLMProvider {
   local: boolean;
 }
 
+export interface HostedStatus {
+  signed_in: boolean;
+  email?: string | null;
+  remaining?: number | null;
+  token_limit?: number | null;
+  tokens_used?: number | null;
+  error?: string;
+}
+
+export function getHostedStatus(): Promise<HostedStatus> {
+  return getJson<HostedStatus>("/llm/hosted/status");
+}
+
+export function signinHosted(email: string): Promise<HostedStatus> {
+  return postJson<HostedStatus>("/llm/hosted/signin", { email });
+}
+
+export function signoutHosted(): Promise<HostedStatus> {
+  return postJson<HostedStatus>("/llm/hosted/signout");
+}
+
 export function getLLMProviders(): Promise<LLMProvider[]> {
   return getJson<LLMProvider[]>("/llm/providers");
 }

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any
@@ -25,6 +26,7 @@ logger = logging.getLogger(__name__)
 
 __all__ = [
     "LLMUnavailable",
+    "HOSTED_GATEWAY",
     "PROVIDERS",
     "ProviderSpec",
     "make_client",
@@ -46,6 +48,9 @@ class ProviderSpec:
     needs_key: bool = True
 
 
+#: Root of the opt-in hosted gateway (dev default; set for real deployments).
+HOSTED_GATEWAY = os.environ.get("CONFAB_HOSTED_URL", "http://127.0.0.1:8900").rstrip("/")
+
 PROVIDERS: list[ProviderSpec] = [
     ProviderSpec(
         id="ollama",
@@ -54,6 +59,14 @@ PROVIDERS: list[ProviderSpec] = [
         default_model="llama3.2",
         protocol="ollama",
         needs_key=False,
+    ),
+    ProviderSpec(
+        id="confab-hosted",
+        label="Confab Hosted (free tier)",
+        base_url=f"{HOSTED_GATEWAY}/v1",
+        default_model="",  # the gateway picks the upstream model
+        protocol="openai",  # the gateway speaks OpenAI chat-completions
+        needs_key=True,     # the "key" is the signed-in hosted token
     ),
     ProviderSpec(
         id="openai",
@@ -162,9 +175,18 @@ def _friendly_http_error(provider_label: str, exc: Exception) -> LLMUnavailable:
             )
         detail = ""
         try:
-            detail = exc.response.json().get("error", {}).get("message", "")
+            body = exc.response.json()
+            detail = (
+                body.get("error", {}).get("message")
+                or body.get("detail")  # FastAPI (the hosted gateway) shape
+                or ""
+            )
         except Exception:
             pass
+        if code == 402:  # hosted free tier used up
+            return LLMUnavailable(
+                detail or f"{provider_label}: free tier used up for this month."
+            )
         return LLMUnavailable(
             f"{provider_label}: request failed ({code}). {detail}".strip()
         )
