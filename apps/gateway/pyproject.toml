@@ -1,0 +1,26 @@
+[project]
+name = "confab-gateway"
+version = "0.1.0"
+description = "Confab Gateway — opt-in hosted-tier metering, user management, and admin."
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.138.0",
+    "httpx>=0.27.0",
+    "pydantic>=2.13.4",
+    "uvicorn[standard]>=0.49.0",
+]
+
+[dependency-groups]
+dev = ["pytest>=9.1.1", "ruff>=0.4.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["."]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501"]

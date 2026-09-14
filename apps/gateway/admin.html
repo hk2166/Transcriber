@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Confab Gateway · Admin</title>
+<style>
+  :root {
+    --bg:#0b1416; --surface:#111c1f; --surface-2:#16252a; --text:#ecf6f4;
+    --text-2:rgba(226,244,241,.66); --text-3:rgba(226,244,241,.42);
+    --line:rgba(94,234,212,.14); --accent:#2dd4bf; --on-accent:#04201c;
+    --warn:#fbbf24; --crit:#f87171; --ok:#34d399;
+    color-scheme:dark;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font:14px/1.5 -apple-system,system-ui,"Segoe UI",sans-serif; }
+  header { display:flex; align-items:center; gap:14px; padding:18px 24px;
+    border-bottom:1px solid var(--line); background:var(--surface-2); }
+  header h1 { margin:0; font-size:16px; font-weight:600; letter-spacing:-.01em; }
+  header .sub { color:var(--text-3); font-size:12.5px; }
+  header .spacer { flex:1; }
+  input, button { font:inherit; }
+  input { background:var(--bg); color:var(--text); border:1px solid var(--line);
+    border-radius:8px; padding:7px 10px; }
+  button { border:none; border-radius:8px; padding:6px 12px; font-weight:600;
+    cursor:pointer; background:var(--accent); color:var(--on-accent); }
+  button.ghost { background:transparent; color:var(--text-2); border:1px solid var(--line); }
+  button.ghost:hover { color:var(--text); border-color:var(--accent); }
+  main { max-width:1040px; margin:0 auto; padding:24px; }
+  .gate { display:flex; gap:10px; align-items:center; margin:60px auto; max-width:460px;
+    flex-direction:column; text-align:center; }
+  .gate p { color:var(--text-2); margin:0 0 6px; }
+  .gate .row { display:flex; gap:8px; width:100%; }
+  .gate input { flex:1; }
+  table { width:100%; border-collapse:collapse; font-size:13.5px; }
+  th { text-align:left; font-size:11px; font-weight:600; letter-spacing:.06em;
+    text-transform:uppercase; color:var(--text-3); padding:10px 12px;
+    border-bottom:1px solid var(--line); }
+  td { padding:11px 12px; border-bottom:1px solid var(--line); vertical-align:middle; }
+  tr:hover td { background:var(--surface); }
+  .email { font-weight:500; }
+  .muted { color:var(--text-3); font-size:12px; }
+  .pill { display:inline-flex; align-items:center; gap:6px; font-size:11.5px;
+    font-weight:600; padding:2px 9px; border-radius:999px; }
+  .pill--active { background:rgba(52,211,153,.14); color:var(--ok); }
+  .pill--blocked { background:rgba(248,113,113,.14); color:var(--crit); }
+  .bar { position:relative; width:150px; height:8px; border-radius:999px;
+    background:var(--surface-2); overflow:hidden; }
+  .bar > span { position:absolute; inset:0 auto 0 0; background:var(--accent); }
+  .bar.over > span { background:var(--crit); }
+  .bar.warn > span { background:var(--warn); }
+  .usage-num { font-variant-numeric:tabular-nums; color:var(--text-2); font-size:12px; }
+  .actions { display:flex; gap:6px; justify-content:flex-end; }
+  .actions button { padding:4px 10px; font-size:12px; }
+  .toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
+    background:var(--surface); border:1px solid var(--line); border-radius:10px;
+    padding:10px 16px; color:var(--text); box-shadow:0 8px 30px rgba(0,0,0,.4); }
+  .empty { text-align:center; color:var(--text-3); padding:60px 0; }
+  [hidden] { display:none !important; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Confab Gateway</h1>
+  <span class="sub">Hosted-tier user &amp; usage admin</span>
+  <span class="spacer"></span>
+  <button class="ghost" id="signout" hidden>Sign out</button>
+</header>
+
+<main>
+  <div class="gate" id="gate">
+    <p>Enter the admin token to manage hosted-tier users.</p>
+    <div class="row">
+      <input id="token" type="password" placeholder="Admin token" autocomplete="off" />
+      <button id="enter">Open</button>
+    </div>
+  </div>
+
+  <div id="panel" hidden>
+    <table>
+      <thead>
+        <tr><th>User</th><th>Status</th><th>Usage this month</th><th></th></tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div class="empty" id="empty" hidden>No users yet. They appear here after the first hosted sign-in.</div>
+  </div>
+</main>
+
+<script>
+const $ = (s) => document.querySelector(s);
+let TOKEN = localStorage.getItem("confab_admin_token") || "";
+
+function toast(msg) {
+  const t = document.createElement("div");
+  t.className = "toast"; t.textContent = msg; document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2600);
+}
+async function api(path, opts = {}) {
+  const res = await fetch(path, {
+    ...opts,
+    headers: { "X-Admin-Token": TOKEN, "Content-Type": "application/json", ...(opts.headers||{}) },
+  });
+  if (res.status === 403) { signOut(); throw new Error("Admin token rejected."); }
+  if (!res.ok) throw new Error((await res.json().catch(()=>({}))).detail || `HTTP ${res.status}`);
+  return res.status === 204 ? null : res.json();
+}
+function fmt(n) { return n.toLocaleString(); }
+
+function render(users) {
+  $("#gate").hidden = true; $("#panel").hidden = false; $("#signout").hidden = false;
+  $("#empty").hidden = users.length > 0;
+  $("#rows").innerHTML = users.map((u) => {
+    const pct = u.token_limit ? Math.min(100, Math.round(u.tokens_used / u.token_limit * 100)) : 0;
+    const cls = pct >= 100 ? "over" : pct >= 80 ? "warn" : "";
+    return `<tr data-id="${u.id}">
+      <td><div class="email">${u.email}</div><div class="muted">joined ${u.created_at}</div></td>
+      <td><span class="pill pill--${u.status}">${u.status}</span></td>
+      <td>
+        <div class="bar ${cls}"><span style="width:${pct}%"></span></div>
+        <div class="usage-num">${fmt(u.tokens_used)} / ${fmt(u.token_limit)} tokens</div>
+      </td>
+      <td><div class="actions">
+        <button class="ghost" data-act="limit">Limit</button>
+        <button class="ghost" data-act="reset">Reset</button>
+        <button class="ghost" data-act="toggle">${u.status === "active" ? "Block" : "Unblock"}</button>
+      </div></td>
+    </tr>`;
+  }).join("");
+}
+
+async function load() {
+  try { render(await api("/admin/users")); }
+  catch (e) { toast(e.message); }
+}
+
+async function act(id, button) {
+  const kind = button.dataset.act;
+  try {
+    if (kind === "reset") { await api(`/admin/users/${id}/reset`, { method: "POST" }); toast("Usage reset."); }
+    else if (kind === "toggle") {
+      const blocking = button.textContent === "Block";
+      await api(`/admin/users/${id}`, { method: "PATCH", body: JSON.stringify({ status: blocking ? "blocked" : "active" }) });
+      toast(blocking ? "User blocked." : "User unblocked.");
+    } else if (kind === "limit") {
+      const v = prompt("New monthly token limit:");
+      if (v === null) return;
+      await api(`/admin/users/${id}`, { method: "PATCH", body: JSON.stringify({ token_limit: parseInt(v, 10) || 0 }) });
+      toast("Limit updated.");
+    }
+    await load();
+  } catch (e) { toast(e.message); }
+}
+
+function signOut() {
+  TOKEN = ""; localStorage.removeItem("confab_admin_token");
+  $("#panel").hidden = true; $("#signout").hidden = true; $("#gate").hidden = false;
+}
+
+$("#enter").onclick = () => {
+  TOKEN = $("#token").value.trim();
+  localStorage.setItem("confab_admin_token", TOKEN);
+  load();
+};
+$("#token").onkeydown = (e) => { if (e.key === "Enter") $("#enter").click(); };
+$("#signout").onclick = signOut;
+$("#rows").onclick = (e) => {
+  const btn = e.target.closest("button[data-act]"); if (!btn) return;
+  act(btn.closest("tr").dataset.id, btn);
+};
+
+if (TOKEN) load();
+</script>
+</body>
+</html>
