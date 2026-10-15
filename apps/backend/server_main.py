@@ -7,7 +7,20 @@ the FastAPI app.
 
 from __future__ import annotations
 
-import os
+import multiprocessing
+
+if __name__ == "__main__":
+    # MUST run before anything else. Frozen, sys.executable is this binary, so
+    # when a library starts multiprocessing's resource tracker (tqdm does, via
+    # huggingface_hub, whenever the refine model loads) Python re-executes us
+    # with `-c "from multiprocessing.resource_tracker import main; ..."`.
+    # Without this that boots a whole second backend, which re-processes the
+    # interrupted meeting and spawns another — an endless chain that exhausted
+    # memory and reset the Mac (2026-10-15). PyInstaller's runtime hook makes
+    # this run the tracker code and exit instead.
+    multiprocessing.freeze_support()
+
+import os  # noqa: E402
 
 # The Xet native accelerator (hf_xet) is not bundled — it's an optional
 # huggingface_hub download optimisation with an automatic HTTP fallback.

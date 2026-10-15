@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 import calendar_lookahead
 import meeting_detect
-from database import close_db, get_db
+from database import close_db, db_path, get_db
 from routers.action_items import router as action_items_router
 from routers.audio import router as audio_router
 from routers.chat import router as chat_router
@@ -57,16 +57,25 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     import asyncio
     from contextlib import suppress
 
+    import instance_lock
     import postprocess_job
     from sessions import manager
 
+    lock_path = db_path().parent / "backend.lock"
+    try:
+        lock_fd = instance_lock.acquire(lock_path)
+    except instance_lock.AnotherInstanceRunning:
+        # Fail startup rather than run a second reconciler on the same DB.
+        logger.error("Another Confab backend is already running (%s); exiting.", lock_path)
+        raise
     get_db()  # open + migrate before serving
     # Recover any meeting a previous crash / force-quit left stuck before serving.
     postprocess_job.reconcile_interrupted_meetings()
     detect_task = asyncio.create_task(meeting_detect.poller())
     lookahead_task = asyncio.create_task(calendar_lookahead.refresher())
+    orphan_task = asyncio.create_task(instance_lock.exit_when_orphaned())
     yield
-    for task in (lookahead_task, detect_task):
+    for task in (orphan_task, lookahead_task, detect_task):
         task.cancel()
         with suppress(asyncio.CancelledError):
             await task
@@ -77,6 +86,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     except Exception:
         logger.exception("Error finalizing the active session on shutdown.")
     close_db()
+    instance_lock.release(lock_fd)
 
 
 app = FastAPI(
